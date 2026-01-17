@@ -10,14 +10,14 @@ local DEFAULT_SETTINGS = {
     fontSize = 18,
     scrollSpeed = 3.5,          -- Duration in seconds
     fadeStartTime = 2.5,        -- When fade begins
-    startOffsetX = 200,         -- Horizontal offset from screen center
+    startOffsetX = 200,         -- Horizontal offset from screen center (negative = left, positive = right)
     startOffsetY = -20,         -- Vertical offset from screen center (negative = below)
     scrollDistance = 150,       -- How far text scrolls upward
     maxMessages = 10,           -- Maximum simultaneous messages
-    anchorPoint = "RIGHT",      -- Which side of screen center (LEFT or RIGHT)
     showQuantity = true,        -- Show stack counts
     minQuality = 0,             -- Minimum quality to show (0 = all)
-    showBackground = false,     -- Show opaque background behind loot text
+    showBackground = false,     -- Show background behind loot text
+    backgroundOpacity = 0.7,    -- Background opacity (0.0 to 1.0)
 };
 
 -- Local references for performance
@@ -57,6 +57,9 @@ local livePreviewActive = false;
 local livePreviewTimer = 0;
 local LIVE_PREVIEW_INTERVAL = 1.5; -- Spawn new preview every 1.5 seconds
 
+-- Draggable preview area frame
+local PreviewAreaFrame = nil;
+
 -- Main frame
 local ScrollingLoot = CreateFrame("Frame", "ScrollingLootFrame", UIParent);
 ScrollingLoot:SetAllPoints();
@@ -89,8 +92,7 @@ local function CreateMessageFrame()
 
     -- Animation state
     frame.scrollTime = 0;
-    frame.startX = 0;
-    frame.startY = 0;
+    frame.stackOffsetY = 0;  -- Offset from base spawn point (for stacking)
     frame.isPreview = false;
 
     return frame;
@@ -110,6 +112,7 @@ local function ReleaseMessageFrame(frame)
     frame:Hide();
     frame:ClearAllPoints();
     frame.scrollTime = 0;
+    frame.stackOffsetY = 0;
     frame.isPreview = false;
     frame.background:Hide();
     tinsert(messagePool, frame);
@@ -139,10 +142,22 @@ local function GetQualityColor(quality)
 end
 
 -- Calculate position based on scroll progress
+-- Uses current db offset so messages follow when dragging the preview area
 local function CalculatePosition(frame)
+    local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+    local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+    local centerX = screenWidth / 2;
+    local centerY = screenHeight / 2;
+
+    -- Base position from current settings + message's stack offset
+    local baseX = centerX + db.startOffsetX;
+    local baseY = centerY + db.startOffsetY + frame.stackOffsetY;
+
+    -- Add scroll progress
     local progress = frame.scrollTime / db.scrollSpeed;
-    local yOffset = db.scrollDistance * progress;
-    return frame.startX, frame.startY + yOffset;
+    local scrollOffset = db.scrollDistance * progress;
+
+    return baseX, baseY + scrollOffset;
 end
 
 -- Add a loot message to display (internal, skips enabled check for preview)
@@ -188,37 +203,31 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
         frame.background:ClearAllPoints();
         frame.background:SetPoint("TOPLEFT", frame, "TOPLEFT", -padding, padding);
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
-        frame.background:SetColorTexture(0, 0, 0, 0.7);
+        frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
         frame.background:Show();
     else
         frame.background:Hide();
     end
 
-    -- Calculate start position relative to screen center
-    local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
-    local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
-    local centerX = screenWidth / 2;
-    local centerY = screenHeight / 2;
-
-    if db.anchorPoint == "RIGHT" then
-        frame.startX = centerX + db.startOffsetX;
-    else
-        frame.startX = centerX - db.startOffsetX - 200;
-    end
-    frame.startY = centerY + db.startOffsetY;
-
-    -- Stack messages to avoid overlap
+    -- Calculate stack offset to avoid overlap with existing messages
+    frame.stackOffsetY = 0;
     for _, existingFrame in ipairs(activeMessages) do
-        local _, existingY = CalculatePosition(existingFrame);
-        local overlap = frame.startY - existingY;
+        -- Check if this message would overlap with existing one
+        -- existingFrame.stackOffsetY is its offset, plus its scroll progress
+        local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
+        local existingScrollOffset = db.scrollDistance * existingProgress;
+        local existingY = existingFrame.stackOffsetY + existingScrollOffset;
+
+        local overlap = frame.stackOffsetY - existingY;
         if overlap > -30 and overlap < 30 then
-            frame.startY = existingY - 30;
+            frame.stackOffsetY = existingY - 30;
         end
     end
 
     -- Position and show
     frame.scrollTime = 0;
-    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", frame.startX, frame.startY);
+    local x, y = CalculatePosition(frame);
+    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
     frame:SetAlpha(1);
     frame:Show();
 
@@ -348,6 +357,152 @@ local function StopLivePreview()
         else
             i = i + 1;
         end
+    end
+end
+
+-- Create the draggable preview area frame (one large frame covering the preview area)
+local function CreatePreviewAreaFrame()
+    if PreviewAreaFrame then return PreviewAreaFrame; end
+
+    local frame = CreateFrame("Frame", "ScrollingLootPreviewArea", UIParent);
+    frame:SetSize(280, db.scrollDistance + 60); -- Wide enough for text, tall enough for scroll distance
+    frame:SetFrameStrata("DIALOG");
+    frame:SetFrameLevel(50);
+    frame:EnableMouse(true);
+    frame:SetMovable(true);
+    frame:SetClampedToScreen(true);
+    frame:Hide();
+
+    -- Light blue hover highlight (covers the whole area)
+    frame.highlight = frame:CreateTexture(nil, "BACKGROUND");
+    frame.highlight:SetAllPoints();
+    frame.highlight:SetColorTexture(0.2, 0.5, 0.8, 0.25);
+    frame.highlight:Hide();
+
+    -- Border (shows on hover)
+    frame.border = frame:CreateTexture(nil, "BORDER");
+    frame.border:SetPoint("TOPLEFT", -2, 2);
+    frame.border:SetPoint("BOTTOMRIGHT", 2, -2);
+    frame.border:SetColorTexture(0.3, 0.6, 1.0, 0.6);
+    frame.border:Hide();
+
+    -- Inner area (to create border effect)
+    frame.inner = frame:CreateTexture(nil, "BORDER", nil, 1);
+    frame.inner:SetAllPoints();
+    frame.inner:SetColorTexture(0, 0, 0, 0);
+    frame.inner:Hide();
+
+    -- Hover handlers
+    frame:SetScript("OnEnter", function(self)
+        self.highlight:Show();
+        self.border:Show();
+        self.inner:Show();
+        SetCursor("Interface\\CURSOR\\UI-Cursor-Move");
+    end);
+
+    frame:SetScript("OnLeave", function(self)
+        if not self.isDragging then
+            self.highlight:Hide();
+            self.border:Hide();
+            self.inner:Hide();
+        end
+        SetCursor(nil);
+    end);
+
+    -- Drag handlers
+    frame:RegisterForDrag("LeftButton");
+
+    frame:SetScript("OnDragStart", function(self)
+        self.isDragging = true;
+        self.highlight:Show();
+        self.border:Show();
+        self.inner:Show();
+        self:StartMoving();
+    end);
+
+    -- Helper to calculate spawn offset from frame position
+    local function UpdateOffsetFromFrame(self)
+        local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+        local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+        local centerX = screenWidth / 2;
+        local centerY = screenHeight / 2;
+
+        -- Frame is anchored at BOTTOMLEFT with offset (-5, -20) from spawn point
+        -- GetLeft/GetBottom return coordinates in same space as SetPoint uses
+        local left = self:GetLeft();
+        local bottom = self:GetBottom();
+
+        local spawnX = left + 5;
+        local spawnY = bottom + 20;
+
+        db.startOffsetX = spawnX - centerX;
+        db.startOffsetY = spawnY - centerY;
+    end
+
+    -- Real-time update while dragging
+    frame:SetScript("OnUpdate", function(self)
+        if self.isDragging then
+            UpdateOffsetFromFrame(self);
+        end
+    end);
+
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing();
+        self.isDragging = false;
+
+        if not self:IsMouseOver() then
+            self.highlight:Hide();
+            self.border:Hide();
+            self.inner:Hide();
+        end
+
+        -- Final position update
+        UpdateOffsetFromFrame(self);
+
+        -- Round to nearest 5 for cleaner saved values
+        db.startOffsetX = floor(db.startOffsetX / 5 + 0.5) * 5;
+        db.startOffsetY = floor(db.startOffsetY / 5 + 0.5) * 5;
+    end);
+
+    PreviewAreaFrame = frame;
+    return frame;
+end
+
+-- Update preview area frame position based on current db settings
+local function UpdatePreviewAreaPosition()
+    if not PreviewAreaFrame then return; end
+
+    -- Update size based on scroll distance
+    PreviewAreaFrame:SetSize(280, db.scrollDistance + 40);
+
+    -- Use exact same coordinate calculation as messages do
+    local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+    local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+    local centerX = screenWidth / 2;
+    local centerY = screenHeight / 2;
+
+    local x = centerX + db.startOffsetX;
+    local y = centerY + db.startOffsetY;
+
+    -- Messages use SetPoint("LEFT", ..., x, y) - left edge at vertical center
+    -- Position our frame similarly, with bottom at spawn point (messages scroll UP)
+    PreviewAreaFrame:ClearAllPoints();
+    PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 5, y - 20);
+end
+
+-- Show preview area frame
+local function ShowPreviewArea()
+    if not PreviewAreaFrame then
+        CreatePreviewAreaFrame();
+    end
+    UpdatePreviewAreaPosition();
+    PreviewAreaFrame:Show();
+end
+
+-- Hide preview area frame
+local function HidePreviewArea()
+    if PreviewAreaFrame then
+        PreviewAreaFrame:Hide();
     end
 end
 
@@ -647,7 +802,7 @@ local function CreateOptionsFrame()
 
     -- Main frame
     local frame = CreateFrame("Frame", "ScrollingLootOptionsFrame", UIParent, "BackdropTemplate");
-    frame:SetSize(500, 500);
+    frame:SetSize(500, 380);
     frame:SetPoint("CENTER");
     frame:SetBackdrop(FrameBackdrop);
     frame:SetBackdropColor(0, 0, 0, 1);
@@ -736,15 +891,12 @@ local function CreateOptionsFrame()
     end;
     yOffset = yOffset - 35;
 
-    -- Anchor point dropdown
-    local anchorDropdown = CreateDropdown(leftCol, "Anchor Side", {
-        { value = "RIGHT", text = "Right of Center" },
-        { value = "LEFT", text = "Left of Center" },
-    }, 200);
-    anchorDropdown:SetPoint("TOPLEFT", 0, yOffset);
-    anchorDropdown:SetValue(db.anchorPoint);
-    anchorDropdown.OnValueChanged = function(self, value)
-        db.anchorPoint = value;
+    -- Background opacity slider
+    local bgOpacitySlider = CreateSlider(leftCol, "Background Opacity", 0, 100, 5, 200);
+    bgOpacitySlider:SetPoint("TOPLEFT", 0, yOffset);
+    bgOpacitySlider:SetValue(db.backgroundOpacity * 100);
+    bgOpacitySlider.OnValueChanged = function(self, value)
+        db.backgroundOpacity = value / 100;
     end;
     yOffset = yOffset - 55;
 
@@ -767,31 +919,6 @@ local function CreateOptionsFrame()
     maxMsgSlider:SetValue(db.maxMessages);
     maxMsgSlider.OnValueChanged = function(self, value)
         db.maxMessages = value;
-    end;
-    yOffset = yOffset - 55;
-
-    -- Position section (in left column)
-    local posLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
-    posLabel:SetPoint("TOPLEFT", 0, yOffset);
-    posLabel:SetText("Position");
-    posLabel:SetTextColor(1, 0.82, 0);
-    yOffset = yOffset - 25;
-
-    -- X offset slider
-    local xSlider = CreateSlider(leftCol, "Horizontal Offset", 0, 600, 10, 200);
-    xSlider:SetPoint("TOPLEFT", 0, yOffset);
-    xSlider:SetValue(db.startOffsetX);
-    xSlider.OnValueChanged = function(self, value)
-        db.startOffsetX = value;
-    end;
-    yOffset = yOffset - 55;
-
-    -- Y offset slider
-    local ySlider = CreateSlider(leftCol, "Vertical Offset", -400, 400, 10, 200);
-    ySlider:SetPoint("TOPLEFT", 0, yOffset);
-    ySlider:SetValue(db.startOffsetY);
-    ySlider.OnValueChanged = function(self, value)
-        db.startOffsetY = value;
     end;
 
     -- Right column - Appearance & Animation
@@ -867,6 +994,8 @@ local function CreateOptionsFrame()
     distSlider:SetValue(db.scrollDistance);
     distSlider.OnValueChanged = function(self, value)
         db.scrollDistance = value;
+        -- Update preview area size to match new scroll distance
+        UpdatePreviewAreaPosition();
     end;
 
     -- Bottom buttons
@@ -891,7 +1020,7 @@ local function CreateOptionsFrame()
         enabledCheckbox:SetValue(db.enabled);
         quantityCheckbox:SetValue(db.showQuantity);
         bgCheckbox:SetValue(db.showBackground);
-        anchorDropdown:SetValue(db.anchorPoint);
+        bgOpacitySlider:SetValue(db.backgroundOpacity * 100);
         qualityDropdown:SetValue(db.minQuality);
         maxMsgSlider:SetValue(db.maxMessages);
         iconSlider:SetValue(db.iconSize);
@@ -899,24 +1028,26 @@ local function CreateOptionsFrame()
         speedSlider:SetValue(db.scrollSpeed);
         fadeSlider:SetValue(db.fadeStartTime);
         distSlider:SetValue(db.scrollDistance);
-        xSlider:SetValue(db.startOffsetX);
-        ySlider:SetValue(db.startOffsetY);
+        -- Update preview area position
+        UpdatePreviewAreaPosition();
         print("|cff00ff00ScrollingLoot|r settings reset to defaults.");
     end);
 
     -- Live preview info text
     local previewInfo = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
     previewInfo:SetPoint("BOTTOM", 0, 18);
-    previewInfo:SetText("Live preview active while options are open");
+    previewInfo:SetText("Drag the blue highlighted area to reposition loot");
     previewInfo:SetTextColor(0.7, 0.7, 0.7);
 
-    -- OnShow/OnHide for live preview
+    -- OnShow/OnHide for live preview and draggable area
     frame:SetScript("OnShow", function()
         StartLivePreview();
+        ShowPreviewArea();
     end);
 
     frame:SetScript("OnHide", function()
         StopLivePreview();
+        HidePreviewArea();
     end);
 
     -- ESC to close
@@ -976,6 +1107,16 @@ local function OnEvent(self, event, ...)
             -- Initialize saved variables
             if not ScrollingLootDB then
                 ScrollingLootDB = {};
+            end
+
+            -- Migrate old anchorPoint setting to free-form X offset
+            if ScrollingLootDB.anchorPoint then
+                if ScrollingLootDB.anchorPoint == "LEFT" then
+                    -- Convert LEFT anchor to negative offset
+                    local oldOffset = ScrollingLootDB.startOffsetX or DEFAULT_SETTINGS.startOffsetX;
+                    ScrollingLootDB.startOffsetX = -(oldOffset + 200);
+                end
+                ScrollingLootDB.anchorPoint = nil; -- Remove deprecated setting
             end
 
             -- Copy defaults for any missing values
