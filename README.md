@@ -10,7 +10,8 @@ Built for WoW Classic Anniversary Edition (2.5.5).
 - Shows item icons alongside item names
 - Colors item names by rarity (grey, white, green, blue, purple, orange)
 - Displays stack quantities for multi-item loots
-- **Drag-to-position**: Open options and drag the highlighted area to reposition loot text in real-time
+- Auto-loot items instantly and completely hide the loot window (hold SHIFT to show normally)
+- Open options and drag the highlighted area to reposition loot text in real-time
 - Minimum quality filter to reduce clutter
 - Adjustable font and icon sizes
 - Configurable scroll speed, distance, and fade timing
@@ -40,6 +41,7 @@ Open the options panel with `/sloot` to configure:
 - **Enable/Disable** - Toggle the addon on/off
 - **Show Stack Counts** - Display quantity for multi-item loots
 - **Show Background** - Optional dark background behind loot text
+- **Fast Loot (hide window)** - Auto-loot items and hide loot window; hold SHIFT while looting to show normally
 - **Background Opacity** - Adjust background transparency
 - **Minimum Quality** - Filter out items below a certain rarity
 - **Max Simultaneous Messages** - Limit how many loot messages show at once

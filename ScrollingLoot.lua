@@ -18,6 +18,7 @@ local DEFAULT_SETTINGS = {
     minQuality = 0,             -- Minimum quality to show (0 = all)
     showBackground = false,     -- Show background behind loot text
     backgroundOpacity = 0.7,    -- Background opacity (0.0 to 1.0)
+    fastLoot = false,           -- Fast loot: auto-loot and hide loot window (hold SHIFT to show)
 };
 
 -- Local references for performance
@@ -507,6 +508,65 @@ local function HidePreviewArea()
 end
 
 --------------------------------------------------------------------------------
+-- Fast Loot System
+--------------------------------------------------------------------------------
+
+local FastLootFrame = CreateFrame("Frame");
+local fastLootDelay = 0;
+
+-- Perform fast looting of all items
+local function DoFastLoot()
+    if GetTime() - fastLootDelay >= 0.3 then
+        fastLootDelay = GetTime();
+        -- Check if auto-loot is effectively enabled (CVar XOR modifier key)
+        if GetCVarBool("autoLootDefault") ~= IsModifiedClick("AUTOLOOTTOGGLE") then
+            local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
+            if lootMethod == 2 then
+                -- Master loot enabled: only fast loot items below threshold
+                local lootThreshold = GetLootThreshold();
+                for i = GetNumLootItems(), 1, -1 do
+                    local _, _, _, _, quality, locked = GetLootSlotInfo(i);
+                    if quality and lootThreshold and quality < lootThreshold and not locked then
+                        LootSlot(i);
+                    end
+                end
+            else
+                -- Normal loot: fast loot everything
+                for i = GetNumLootItems(), 1, -1 do
+                    local _, _, _, _, _, locked = GetLootSlotInfo(i);
+                    if not locked then
+                        LootSlot(i);
+                    end
+                end
+            end
+            fastLootDelay = GetTime();
+        end
+    end
+end
+
+-- Handle loot events
+local function FastLoot_OnEvent(self, event, ...)
+    if not db.fastLoot then return; end
+
+    -- SHIFT override: show loot window normally
+    if IsShiftKeyDown() then return; end
+
+    if event == "LOOT_OPENED" then
+        -- Hide the loot frame immediately
+        if LootFrame and LootFrame:IsShown() then
+            LootFrame:Hide();
+        end
+    elseif event == "LOOT_READY" then
+        -- Perform fast loot
+        DoFastLoot();
+    end
+end
+
+FastLootFrame:RegisterEvent("LOOT_OPENED");
+FastLootFrame:RegisterEvent("LOOT_READY");
+FastLootFrame:SetScript("OnEvent", FastLoot_OnEvent);
+
+--------------------------------------------------------------------------------
 -- Options GUI (Ace3-Style)
 --------------------------------------------------------------------------------
 
@@ -802,7 +862,7 @@ local function CreateOptionsFrame()
 
     -- Main frame
     local frame = CreateFrame("Frame", "ScrollingLootOptionsFrame", UIParent, "BackdropTemplate");
-    frame:SetSize(500, 380);
+    frame:SetSize(500, 410);
     frame:SetPoint("CENTER");
     frame:SetBackdrop(FrameBackdrop);
     frame:SetBackdropColor(0, 0, 0, 1);
@@ -889,6 +949,24 @@ local function CreateOptionsFrame()
     bgCheckbox.OnValueChanged = function(self, value)
         db.showBackground = value;
     end;
+    yOffset = yOffset - 30;
+
+    -- Fast loot checkbox
+    local fastLootCheckbox = CreateCheckbox(leftCol, "Fast Loot (hide window)", 200);
+    fastLootCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    fastLootCheckbox:SetValue(db.fastLoot);
+    fastLootCheckbox.OnValueChanged = function(self, value)
+        db.fastLoot = value;
+    end;
+    fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nHold SHIFT while looting to show the window normally.";
+    fastLootCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    fastLootCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
     yOffset = yOffset - 35;
 
     -- Background opacity slider
@@ -1020,6 +1098,7 @@ local function CreateOptionsFrame()
         enabledCheckbox:SetValue(db.enabled);
         quantityCheckbox:SetValue(db.showQuantity);
         bgCheckbox:SetValue(db.showBackground);
+        fastLootCheckbox:SetValue(db.fastLoot);
         bgOpacitySlider:SetValue(db.backgroundOpacity * 100);
         qualityDropdown:SetValue(db.minQuality);
         maxMsgSlider:SetValue(db.maxMessages);
