@@ -1077,20 +1077,13 @@ end
 -- Event handler
 local function OnEvent(self, event, ...)
     if event == "CHAT_MSG_LOOT" then
-        local message, _, _, _, playerName = ...;
+        local message = ...;
 
-        -- Only show our own loot
-        local myName = UnitName("player");
-        if playerName and playerName ~= "" and playerName ~= myName then
+        -- Only show items that enter YOUR inventory
+        -- "You receive loot:" is the specific message when an item goes to your bags
+        -- This filters out: other players looting, items being rolled on, etc.
+        if not strmatch(message, "^You receive loot:") then
             return;
-        end
-
-        -- Also check message content for "You receive"
-        if not strmatch(message, "You receive") and not strmatch(message, myName) then
-            -- Might be someone else's loot, skip
-            if strmatch(message, "receives loot") then
-                return;
-            end
         end
 
         local itemLink, quantity = ParseLootMessage(message);
