@@ -5,6 +5,7 @@
 **Bug Fixes:**
 
 - Fixed optional background not being vertically centered around loot text
+- Fixed stacked loot notifications overlapping in static mode
 
 ## v1.0.1
 

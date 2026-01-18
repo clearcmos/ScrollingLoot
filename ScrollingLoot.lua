@@ -217,6 +217,10 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     end
 
     -- Calculate stack offset to avoid overlap with existing messages
+    -- Spacing based on content height plus margin (extra padding if background shown)
+    local contentHeight = max(db.iconSize, db.fontSize + 4);
+    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
+
     frame.stackOffsetY = 0;
     for _, existingFrame in ipairs(activeMessages) do
         -- Check if this message would overlap with existing one
@@ -232,8 +236,8 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
         end
 
         local overlap = frame.stackOffsetY - existingY;
-        if overlap > -30 and overlap < 30 then
-            frame.stackOffsetY = existingY - 30;
+        if overlap > -stackSpacing and overlap < stackSpacing then
+            frame.stackOffsetY = existingY - stackSpacing;
         end
     end
 
