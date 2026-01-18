@@ -2,6 +2,16 @@
 
 ## v1.0.2
 
+**New Features:**
+
+- **Glow Effect** - Optional glowing effect around item icons for quality-based highlights. Configure minimum quality threshold for when glow appears.
+
+**Improvements:**
+
+- Renamed "Minimum Quality" to "Notifications Min Quality" for clarity
+- Background now dynamically sizes to fit any item name length
+- Drag instructions now appear as prominent text at top of screen when options are open
+
 **Bug Fixes:**
 
 - Fixed optional background not being vertically centered around loot text

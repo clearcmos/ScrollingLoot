@@ -22,6 +22,8 @@ local DEFAULT_SETTINGS = {
     fastLoot = false,           -- Fast loot: auto-loot and hide loot window (hold SHIFT to show)
     bopFrameOffsetX = 0,        -- BoP confirmation frame X offset from center
     bopFrameOffsetY = 100,      -- BoP confirmation frame Y offset from center
+    glowEnabled = false,        -- Enable glow effect on loot notifications
+    glowMinQuality = 0,         -- Minimum quality for glow (0 = all)
 };
 
 -- Local references for performance
@@ -94,6 +96,42 @@ local function CreateMessageFrame()
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", 4, 0);
     frame.text:SetJustifyH("LEFT");
 
+    -- Glow texture (for proc-style effect) - around icon only
+    frame.glow = frame:CreateTexture(nil, "OVERLAY", nil, 7);
+    frame.glow:SetTexture("Interface\\SpellActivationOverlay\\IconAlert");
+    frame.glow:SetTexCoord(0.00781250, 0.50781250, 0.27734375, 0.52734375);
+    frame.glow:SetBlendMode("ADD");
+    frame.glow:SetAlpha(0);
+    frame.glow:SetPoint("CENTER", frame.icon, "CENTER", 0, 0);
+
+    -- Glow animation group
+    frame.glowAnimGroup = frame.glow:CreateAnimationGroup();
+
+    -- Fade in
+    local fadeIn = frame.glowAnimGroup:CreateAnimation("Alpha");
+    fadeIn:SetFromAlpha(0);
+    fadeIn:SetToAlpha(0.8);
+    fadeIn:SetDuration(0.2);
+    fadeIn:SetOrder(1);
+
+    -- Hold
+    local hold = frame.glowAnimGroup:CreateAnimation("Alpha");
+    hold:SetFromAlpha(0.8);
+    hold:SetToAlpha(0.8);
+    hold:SetDuration(0.4);
+    hold:SetOrder(2);
+
+    -- Fade out
+    local fadeOut = frame.glowAnimGroup:CreateAnimation("Alpha");
+    fadeOut:SetFromAlpha(0.8);
+    fadeOut:SetToAlpha(0);
+    fadeOut:SetDuration(0.4);
+    fadeOut:SetOrder(3);
+
+    frame.glowAnimGroup:SetScript("OnFinished", function()
+        frame.glow:SetAlpha(0);
+    end);
+
     -- Animation state
     frame.scrollTime = 0;
     frame.stackOffsetY = 0;  -- Offset from base spawn point (for stacking)
@@ -119,6 +157,8 @@ local function ReleaseMessageFrame(frame)
     frame.stackOffsetY = 0;
     frame.isPreview = false;
     frame.background:Hide();
+    frame.glowAnimGroup:Stop();
+    frame.glow:SetAlpha(0);
     tinsert(messagePool, frame);
 end
 
@@ -185,6 +225,12 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     frame.icon:SetTexture(itemIcon);
     frame.icon:SetSize(db.iconSize, db.iconSize);
 
+    -- Calculate text gap (extra indent when glow is enabled)
+    local textGap = 4;
+    if db.glowEnabled and itemQuality >= db.glowMinQuality then
+        textGap = 12; -- Extra space for glow
+    end
+
     -- Set text with quality color
     local r, g, b = GetQualityColor(itemQuality);
     local displayText = itemName;
@@ -194,18 +240,19 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     frame.text:SetText(displayText);
     frame.text:SetTextColor(r, g, b);
     frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
+    frame.text:ClearAllPoints();
+    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
 
     -- Configure background (hybrid: actual width with min/max bounds)
     if db.showBackground then
         local textWidth = frame.text:GetStringWidth();
-        local contentWidth = db.iconSize + 4 + textWidth;
+        local contentWidth = db.iconSize + textGap + textWidth + 8; -- Extra 8px to ensure text is fully covered
         local contentHeight = max(db.iconSize, db.fontSize + 4);
         local padding = 6;
 
-        -- Clamp width to reasonable bounds
+        -- Minimum width for consistency, but no max - dynamically fits content
         local minWidth = 180;
-        local maxWidth = 320;
-        local bgWidth = max(minWidth, min(maxWidth, contentWidth + (padding * 2)));
+        local bgWidth = max(minWidth, contentWidth + (padding * 2));
 
         frame.background:ClearAllPoints();
         frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
@@ -252,6 +299,15 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
         frame:SetAlpha(1);
     end
     frame:Show();
+
+    -- Trigger glow effect if enabled and quality meets threshold
+    if db.glowEnabled and itemQuality >= db.glowMinQuality then
+        local glowSize = db.iconSize * 2.5; -- Chunky glow around icon
+        frame.glow:SetSize(glowSize, glowSize);
+        frame.glowAnimGroup:Stop();
+        frame.glow:SetAlpha(0);
+        frame.glowAnimGroup:Play();
+    end
 
     tinsert(activeMessages, frame);
 end
@@ -400,7 +456,7 @@ local function CreatePreviewAreaFrame()
     if PreviewAreaFrame then return PreviewAreaFrame; end
 
     local frame = CreateFrame("Frame", "ScrollingLootPreviewArea", UIParent);
-    frame:SetSize(320, db.scrollDistance + 60); -- Wide enough for text, tall enough for scroll distance
+    frame:SetSize(380, db.scrollDistance + 60); -- Wide enough for text + glow, tall enough for scroll distance
     frame:SetFrameStrata("DIALOG");
     frame:SetFrameLevel(50);
     frame:EnableMouse(true);
@@ -452,38 +508,21 @@ local function CreatePreviewAreaFrame()
         self.highlight:Show();
         self.border:Show();
         self.inner:Show();
+        -- Store initial position and offsets for delta-based movement
+        self.dragStartLeft = self:GetLeft();
+        self.dragStartTop = self:GetTop();
+        self.dragStartOffsetX = db.startOffsetX;
+        self.dragStartOffsetY = db.startOffsetY;
         self:StartMoving();
     end);
 
-    -- Helper to calculate spawn offset from frame position
-    local function UpdateOffsetFromFrame(self)
-        local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
-        local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
-        local centerX = screenWidth / 2;
-        local centerY = screenHeight / 2;
-
-        local left = self:GetLeft();
-        local spawnX = left + 5;
-        local spawnY;
-
-        if db.staticMode then
-            -- Static mode: frame anchored at TOPLEFT, spawn point is 15 below top
-            local top = self:GetTop();
-            spawnY = top - 15;
-        else
-            -- Scroll mode: frame anchored at BOTTOMLEFT, spawn point is 20 above bottom
-            local bottom = self:GetBottom();
-            spawnY = bottom + 20;
-        end
-
-        db.startOffsetX = spawnX - centerX;
-        db.startOffsetY = spawnY - centerY;
-    end
-
-    -- Real-time update while dragging
+    -- Real-time update while dragging (delta-based to avoid jitter)
     frame:SetScript("OnUpdate", function(self)
         if self.isDragging then
-            UpdateOffsetFromFrame(self);
+            local deltaX = self:GetLeft() - self.dragStartLeft;
+            local deltaY = self:GetTop() - self.dragStartTop;
+            db.startOffsetX = self.dragStartOffsetX + deltaX;
+            db.startOffsetY = self.dragStartOffsetY + deltaY;
         end
     end);
 
@@ -497,8 +536,11 @@ local function CreatePreviewAreaFrame()
             self.inner:Hide();
         end
 
-        -- Final position update
-        UpdateOffsetFromFrame(self);
+        -- Final delta calculation
+        local deltaX = self:GetLeft() - self.dragStartLeft;
+        local deltaY = self:GetTop() - self.dragStartTop;
+        db.startOffsetX = self.dragStartOffsetX + deltaX;
+        db.startOffsetY = self.dragStartOffsetY + deltaY;
 
         -- Round to nearest 5 for cleaner saved values
         db.startOffsetX = floor(db.startOffsetX / 5 + 0.5) * 5;
@@ -525,17 +567,17 @@ local function UpdatePreviewAreaPosition()
     if db.staticMode then
         -- Static mode: items spawn at y and stack DOWNWARD (negative Y)
         -- Anchor from TOPLEFT so frame extends downward to contain all items
-        local staticHeight = 130; -- Enough for ~4 stacked items (30px each) + padding
-        PreviewAreaFrame:SetSize(320, staticHeight);
+        local staticHeight = 150; -- Enough for ~4 stacked items + padding for glow/background
+        PreviewAreaFrame:SetSize(380, staticHeight);
         PreviewAreaFrame:ClearAllPoints();
-        -- Position TOP of frame slightly above spawn point (+15 padding)
-        PreviewAreaFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 5, y + 15);
+        -- Position TOP of frame above spawn point (+30 padding for background/glow)
+        PreviewAreaFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 25, y + 30);
     else
         -- Scroll mode: frame covers the scroll distance
-        PreviewAreaFrame:SetSize(320, db.scrollDistance + 40);
+        PreviewAreaFrame:SetSize(380, db.scrollDistance + 60);
         PreviewAreaFrame:ClearAllPoints();
         -- Messages scroll UP from spawn point, so bottom of frame at spawn point
-        PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 5, y - 20);
+        PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 25, y - 20);
     end
 end
 
@@ -1240,7 +1282,7 @@ local function CreateOptionsFrame()
 
     -- Main frame
     local frame = CreateFrame("Frame", "ScrollingLootOptionsFrame", UIParent, "BackdropTemplate");
-    frame:SetSize(500, 410);
+    frame:SetSize(500, 500);
     frame:SetPoint("CENTER");
     frame:SetBackdrop(FrameBackdrop);
     frame:SetBackdropColor(0, 0, 0, 1);
@@ -1362,12 +1404,61 @@ local function CreateOptionsFrame()
     end;
     yOffset = yOffset - 55;
 
+    -- Forward declare glowQualityDropdown so checkbox can reference it
+    local glowQualityDropdown;
+
+    -- Glow effect checkbox
+    local glowCheckbox = CreateCheckbox(leftCol, "Glow Effect", 200);
+    glowCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    glowCheckbox:SetValue(db.glowEnabled);
+    glowCheckbox.OnValueChanged = function(self, value)
+        db.glowEnabled = value;
+        -- Grey out glow quality dropdown when disabled
+        if glowQualityDropdown then
+            if value then
+                glowQualityDropdown:SetAlpha(1);
+                glowQualityDropdown.dropdown:EnableMouse(true);
+            else
+                glowQualityDropdown:SetAlpha(0.5);
+                glowQualityDropdown.dropdown:EnableMouse(false);
+            end
+        end
+    end;
+    glowCheckbox.checkbox.tooltipText = "Show a glowing effect around the item icon.";
+    glowCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    glowCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
+    yOffset = yOffset - 30;
+
+    -- Glow min quality dropdown
+    local glowQualityOptions = {};
+    for i = 0, 5 do
+        tinsert(glowQualityOptions, { value = i, text = QUALITY_COLORS[i].name });
+    end
+    glowQualityDropdown = CreateDropdown(leftCol, "Glow Min Quality", glowQualityOptions, 200);
+    glowQualityDropdown:SetPoint("TOPLEFT", 0, yOffset);
+    glowQualityDropdown:SetValue(db.glowMinQuality);
+    glowQualityDropdown.OnValueChanged = function(self, value)
+        db.glowMinQuality = value;
+    end;
+    -- Initialize greyed state
+    if not db.glowEnabled then
+        glowQualityDropdown:SetAlpha(0.5);
+        glowQualityDropdown.dropdown:EnableMouse(false);
+    end
+    yOffset = yOffset - 55;
+
     -- Min quality dropdown
     local qualityOptions = {};
     for i = 0, 5 do
         tinsert(qualityOptions, { value = i, text = QUALITY_COLORS[i].name });
     end
-    local qualityDropdown = CreateDropdown(leftCol, "Minimum Quality", qualityOptions, 200);
+    local qualityDropdown = CreateDropdown(leftCol, "Notifications Min Quality", qualityOptions, 200);
     qualityDropdown:SetPoint("TOPLEFT", 0, yOffset);
     qualityDropdown:SetValue(db.minQuality);
     qualityDropdown.OnValueChanged = function(self, value)
@@ -1529,6 +1620,11 @@ local function CreateOptionsFrame()
         bgCheckbox:SetValue(db.showBackground);
         fastLootCheckbox:SetValue(db.fastLoot);
         bgOpacitySlider:SetValue(db.backgroundOpacity * 100);
+        glowCheckbox:SetValue(db.glowEnabled);
+        glowQualityDropdown:SetValue(db.glowMinQuality);
+        -- Grey out glow quality since glowEnabled defaults to false
+        glowQualityDropdown:SetAlpha(0.5);
+        glowQualityDropdown.dropdown:EnableMouse(false);
         qualityDropdown:SetValue(db.minQuality);
         maxMsgSlider:SetValue(db.maxMessages);
         iconSlider:SetValue(db.iconSize);
@@ -1550,16 +1646,31 @@ local function CreateOptionsFrame()
         print("|cff00ff00ScrollingLoot|r settings reset to defaults.");
     end);
 
-    -- Live preview info text
-    local previewInfo = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
-    previewInfo:SetPoint("BOTTOM", 0, 18);
-    previewInfo:SetText("Drag the blue highlighted areas to reposition loot and BoP dialog");
-    previewInfo:SetTextColor(0.7, 0.7, 0.7);
+    -- Live preview info text - big text at top center of screen with background
+    local previewInfoFrame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate");
+    previewInfoFrame:SetPoint("TOP", UIParent, "TOP", 0, -50);
+    previewInfoFrame:SetSize(500, 40);
+    previewInfoFrame:SetFrameStrata("DIALOG");
+    previewInfoFrame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeSize = 1,
+    });
+    previewInfoFrame:SetBackdropColor(0, 0, 0, 0.8);
+    previewInfoFrame:SetBackdropBorderColor(0.3, 0.6, 1.0, 0.8);
+    previewInfoFrame:Hide();
+
+    local previewInfo = previewInfoFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+    previewInfo:SetPoint("CENTER");
+    previewInfo:SetText("Hover over preview elements to reveal draggable areas");
+    previewInfo:SetTextColor(1, 0.82, 0); -- Yellow/gold color
+    previewInfo:SetFont(previewInfo:GetFont(), 16, "OUTLINE");
 
     -- OnShow/OnHide for live preview and draggable areas
     frame:SetScript("OnShow", function()
         StartLivePreview();
         ShowPreviewArea();
+        previewInfoFrame:Show();
         -- Only show BoP preview if Fast Loot is enabled
         if db.fastLoot then
             ShowBoPPreviewArea();
@@ -1570,6 +1681,7 @@ local function CreateOptionsFrame()
         StopLivePreview();
         HidePreviewArea();
         HideBoPPreviewArea();
+        previewInfoFrame:Hide();
     end);
 
     -- ESC to close

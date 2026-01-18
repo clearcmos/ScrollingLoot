@@ -16,6 +16,7 @@ Built for WoW Classic Anniversary Edition (2.5.5).
 - Minimum quality filter to reduce clutter
 - Adjustable font and icon sizes
 - **Static Mode**: Optional mode where items fade in place without scrolling
+- **Glow Effect**: Optional glowing highlight around item icons based on quality
 - Configurable scroll speed, distance, and fade timing
 - Optional background rectangle behind loot text
 - Live preview while configuring
@@ -44,7 +45,9 @@ Open the options panel with `/sloot` to configure:
 - **Show Background** - Optional dark background behind loot text
 - **Fast Loot (hide window)** - Auto-loot items and hide loot window; hold SHIFT while looting to show normally
 - **Background Opacity** - Adjust background transparency
-- **Minimum Quality** - Filter out items below a certain rarity
+- **Glow Effect** - Enable glowing highlight around item icons
+- **Glow Min Quality** - Minimum quality for glow effect to appear
+- **Notifications Min Quality** - Filter out items below a certain rarity
 - **Max Simultaneous Messages** - Limit how many loot messages show at once
 - **Icon Size** - Adjust item icon size
 - **Font Size** - Adjust text size
