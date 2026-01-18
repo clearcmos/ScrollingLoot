@@ -208,7 +208,7 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
         local bgWidth = max(minWidth, min(maxWidth, contentWidth + (padding * 2)));
 
         frame.background:ClearAllPoints();
-        frame.background:SetPoint("TOPLEFT", frame, "TOPLEFT", -padding, padding);
+        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
         frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
         frame.background:Show();
