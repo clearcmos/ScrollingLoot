@@ -13,12 +13,15 @@ local DEFAULT_SETTINGS = {
     startOffsetX = 200,         -- Horizontal offset from screen center (negative = left, positive = right)
     startOffsetY = -20,         -- Vertical offset from screen center (negative = below)
     scrollDistance = 150,       -- How far text scrolls upward
+    staticMode = false,         -- Static mode: no scrolling, just fade in place
     maxMessages = 10,           -- Maximum simultaneous messages
     showQuantity = true,        -- Show stack counts
     minQuality = 0,             -- Minimum quality to show (0 = all)
     showBackground = false,     -- Show background behind loot text
     backgroundOpacity = 0.7,    -- Background opacity (0.0 to 1.0)
     fastLoot = false,           -- Fast loot: auto-loot and hide loot window (hold SHIFT to show)
+    bopFrameOffsetX = 0,        -- BoP confirmation frame X offset from center
+    bopFrameOffsetY = 100,      -- BoP confirmation frame Y offset from center
 };
 
 -- Local references for performance
@@ -154,11 +157,14 @@ local function CalculatePosition(frame)
     local baseX = centerX + db.startOffsetX;
     local baseY = centerY + db.startOffsetY + frame.stackOffsetY;
 
-    -- Add scroll progress
-    local progress = frame.scrollTime / db.scrollSpeed;
-    local scrollOffset = db.scrollDistance * progress;
+    -- Add scroll progress (only if not in static mode)
+    if not db.staticMode then
+        local progress = frame.scrollTime / db.scrollSpeed;
+        local scrollOffset = db.scrollDistance * progress;
+        baseY = baseY + scrollOffset;
+    end
 
-    return baseX, baseY + scrollOffset;
+    return baseX, baseY;
 end
 
 -- Add a loot message to display (internal, skips enabled check for preview)
@@ -214,10 +220,16 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     frame.stackOffsetY = 0;
     for _, existingFrame in ipairs(activeMessages) do
         -- Check if this message would overlap with existing one
-        -- existingFrame.stackOffsetY is its offset, plus its scroll progress
-        local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
-        local existingScrollOffset = db.scrollDistance * existingProgress;
-        local existingY = existingFrame.stackOffsetY + existingScrollOffset;
+        local existingY;
+        if db.staticMode then
+            -- In static mode, no scroll offset - just use stack offset
+            existingY = existingFrame.stackOffsetY;
+        else
+            -- In scroll mode, account for scroll progress
+            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
+            local existingScrollOffset = db.scrollDistance * existingProgress;
+            existingY = existingFrame.stackOffsetY + existingScrollOffset;
+        end
 
         local overlap = frame.stackOffsetY - existingY;
         if overlap > -30 and overlap < 30 then
@@ -229,7 +241,12 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     frame.scrollTime = 0;
     local x, y = CalculatePosition(frame);
     frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
-    frame:SetAlpha(1);
+    -- Static mode: start at 0 alpha for fade-in effect
+    if db.staticMode then
+        frame:SetAlpha(0);
+    else
+        frame:SetAlpha(1);
+    end
     frame:Show();
 
     tinsert(activeMessages, frame);
@@ -298,6 +315,9 @@ local function ParseLootMessage(message)
     return itemLink, quantity;
 end
 
+-- Fade-in duration for static mode (seconds)
+local STATIC_FADE_IN_DURATION = 0.3;
+
 -- OnUpdate handler for animation
 local function OnUpdate(self, elapsed)
     -- Handle live preview spawning
@@ -327,12 +347,22 @@ local function OnUpdate(self, elapsed)
             frame:ClearAllPoints();
             frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
 
-            -- Fade out near end
+            -- Calculate alpha based on fade-in and fade-out
+            local alpha = 1;
+
+            -- Fade-in for static mode
+            if db.staticMode and frame.scrollTime < STATIC_FADE_IN_DURATION then
+                alpha = frame.scrollTime / STATIC_FADE_IN_DURATION;
+            end
+
+            -- Fade out near end (applies to both modes)
             if frame.scrollTime >= db.fadeStartTime then
                 local fadeProgress = (frame.scrollTime - db.fadeStartTime) /
                                     (db.scrollSpeed - db.fadeStartTime);
-                frame:SetAlpha(1 - fadeProgress);
+                alpha = alpha * (1 - fadeProgress);
             end
+
+            frame:SetAlpha(alpha);
 
             i = i + 1;
         end
@@ -366,7 +396,7 @@ local function CreatePreviewAreaFrame()
     if PreviewAreaFrame then return PreviewAreaFrame; end
 
     local frame = CreateFrame("Frame", "ScrollingLootPreviewArea", UIParent);
-    frame:SetSize(280, db.scrollDistance + 60); -- Wide enough for text, tall enough for scroll distance
+    frame:SetSize(320, db.scrollDistance + 60); -- Wide enough for text, tall enough for scroll distance
     frame:SetFrameStrata("DIALOG");
     frame:SetFrameLevel(50);
     frame:EnableMouse(true);
@@ -428,13 +458,19 @@ local function CreatePreviewAreaFrame()
         local centerX = screenWidth / 2;
         local centerY = screenHeight / 2;
 
-        -- Frame is anchored at BOTTOMLEFT with offset (-5, -20) from spawn point
-        -- GetLeft/GetBottom return coordinates in same space as SetPoint uses
         local left = self:GetLeft();
-        local bottom = self:GetBottom();
-
         local spawnX = left + 5;
-        local spawnY = bottom + 20;
+        local spawnY;
+
+        if db.staticMode then
+            -- Static mode: frame anchored at TOPLEFT, spawn point is 15 below top
+            local top = self:GetTop();
+            spawnY = top - 15;
+        else
+            -- Scroll mode: frame anchored at BOTTOMLEFT, spawn point is 20 above bottom
+            local bottom = self:GetBottom();
+            spawnY = bottom + 20;
+        end
 
         db.startOffsetX = spawnX - centerX;
         db.startOffsetY = spawnY - centerY;
@@ -473,9 +509,6 @@ end
 local function UpdatePreviewAreaPosition()
     if not PreviewAreaFrame then return; end
 
-    -- Update size based on scroll distance
-    PreviewAreaFrame:SetSize(280, db.scrollDistance + 40);
-
     -- Use exact same coordinate calculation as messages do
     local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
     local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
@@ -485,10 +518,21 @@ local function UpdatePreviewAreaPosition()
     local x = centerX + db.startOffsetX;
     local y = centerY + db.startOffsetY;
 
-    -- Messages use SetPoint("LEFT", ..., x, y) - left edge at vertical center
-    -- Position our frame similarly, with bottom at spawn point (messages scroll UP)
-    PreviewAreaFrame:ClearAllPoints();
-    PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 5, y - 20);
+    if db.staticMode then
+        -- Static mode: items spawn at y and stack DOWNWARD (negative Y)
+        -- Anchor from TOPLEFT so frame extends downward to contain all items
+        local staticHeight = 130; -- Enough for ~4 stacked items (30px each) + padding
+        PreviewAreaFrame:SetSize(320, staticHeight);
+        PreviewAreaFrame:ClearAllPoints();
+        -- Position TOP of frame slightly above spawn point (+15 padding)
+        PreviewAreaFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 5, y + 15);
+    else
+        -- Scroll mode: frame covers the scroll distance
+        PreviewAreaFrame:SetSize(320, db.scrollDistance + 40);
+        PreviewAreaFrame:ClearAllPoints();
+        -- Messages scroll UP from spawn point, so bottom of frame at spawn point
+        PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 5, y - 20);
+    end
 end
 
 -- Show preview area frame
@@ -552,7 +596,20 @@ local function FastLoot_OnEvent(self, event, ...)
     if IsShiftKeyDown() then return; end
 
     if event == "LOOT_OPENED" then
-        -- Hide the loot frame immediately
+        -- Don't hide if master loot has items to distribute
+        local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
+        if lootMethod == 2 then
+            local lootThreshold = GetLootThreshold();
+            for i = 1, GetNumLootItems() do
+                local _, _, _, _, quality = GetLootSlotInfo(i);
+                if quality and lootThreshold and quality >= lootThreshold then
+                    -- Has master loot items above threshold - don't hide window
+                    return;
+                end
+            end
+        end
+
+        -- Safe to hide the loot frame
         if LootFrame and LootFrame:IsShown() then
             LootFrame:Hide();
         end
@@ -565,6 +622,323 @@ end
 FastLootFrame:RegisterEvent("LOOT_OPENED");
 FastLootFrame:RegisterEvent("LOOT_READY");
 FastLootFrame:SetScript("OnEvent", FastLoot_OnEvent);
+
+--------------------------------------------------------------------------------
+-- BoP Confirmation Frame (Enhanced)
+--------------------------------------------------------------------------------
+
+local BoPConfirmFrame = nil;
+local BoPPreviewAreaFrame = nil;
+local pendingBoPSlot = nil;
+
+-- Create the BoP confirmation frame
+local function CreateBoPConfirmFrame()
+    if BoPConfirmFrame then return BoPConfirmFrame; end
+
+    local frame = CreateFrame("Frame", "ScrollingLootBoPConfirmFrame", UIParent, "BackdropTemplate");
+    frame:SetSize(280, 150);
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 100);
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 }
+    });
+    frame:SetBackdropColor(0, 0, 0, 1);
+    frame:SetFrameStrata("DIALOG");
+    frame:SetFrameLevel(100);
+    frame:SetMovable(true);
+    frame:SetClampedToScreen(true);
+    frame:EnableMouse(true);
+    frame:Hide();
+
+    -- Item icon
+    frame.icon = frame:CreateTexture(nil, "ARTWORK");
+    frame.icon:SetSize(36, 36);
+    frame.icon:SetPoint("TOPLEFT", 15, -15);
+
+    -- Item name
+    frame.itemName = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+    frame.itemName:SetPoint("TOPLEFT", frame.icon, "TOPRIGHT", 10, -2);
+    frame.itemName:SetPoint("RIGHT", frame, "RIGHT", -15, 0);
+    frame.itemName:SetJustifyH("LEFT");
+    frame.itemName:SetWordWrap(false);
+
+    -- Warning text
+    frame.warning = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    frame.warning:SetPoint("TOPLEFT", frame.icon, "BOTTOMLEFT", 0, -10);
+    frame.warning:SetPoint("RIGHT", frame, "RIGHT", -15, 0);
+    frame.warning:SetJustifyH("LEFT");
+    frame.warning:SetText("This item will bind to you when picked up.\nAre you sure you want to loot it?");
+    frame.warning:SetTextColor(1, 0.82, 0);
+
+    -- OK button
+    frame.okButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
+    frame.okButton:SetSize(80, 22);
+    frame.okButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -5, 18);
+    frame.okButton:SetText("Loot");
+    frame.okButton:SetScript("OnClick", function()
+        if pendingBoPSlot then
+            ConfirmLootSlot(pendingBoPSlot);
+            pendingBoPSlot = nil;
+        end
+        frame:Hide();
+    end);
+
+    -- Cancel button
+    frame.cancelButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
+    frame.cancelButton:SetSize(80, 22);
+    frame.cancelButton:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 5, 18);
+    frame.cancelButton:SetText("Cancel");
+    frame.cancelButton:SetScript("OnClick", function()
+        pendingBoPSlot = nil;
+        frame:Hide();
+    end);
+
+    -- ESC to close
+    frame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false);
+            pendingBoPSlot = nil;
+            self:Hide();
+        else
+            self:SetPropagateKeyboardInput(true);
+        end
+    end);
+
+    BoPConfirmFrame = frame;
+    return frame;
+end
+
+-- Update BoP frame position from saved settings
+local function UpdateBoPFramePosition()
+    if not BoPConfirmFrame then return; end
+
+    local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+    local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+    local centerX = screenWidth / 2;
+    local centerY = screenHeight / 2;
+
+    BoPConfirmFrame:ClearAllPoints();
+    BoPConfirmFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT",
+        centerX + db.bopFrameOffsetX,
+        centerY + db.bopFrameOffsetY);
+end
+
+-- Show BoP confirmation for an item
+local function ShowBoPConfirmation(slot, itemName, itemIcon, itemQuality)
+    if not BoPConfirmFrame then
+        CreateBoPConfirmFrame();
+    end
+
+    pendingBoPSlot = slot;
+
+    -- Set item info
+    BoPConfirmFrame.icon:SetTexture(itemIcon);
+
+    local r, g, b = GetQualityColor(itemQuality or 1);
+    BoPConfirmFrame.itemName:SetText(itemName or "Unknown Item");
+    BoPConfirmFrame.itemName:SetTextColor(r, g, b);
+
+    UpdateBoPFramePosition();
+    BoPConfirmFrame:Show();
+    BoPConfirmFrame:SetFrameStrata("DIALOG");
+    BoPConfirmFrame:Raise();
+end
+
+-- Show preview BoP frame (for options panel)
+local function ShowBoPPreview()
+    if not BoPConfirmFrame then
+        CreateBoPConfirmFrame();
+    end
+
+    pendingBoPSlot = nil;
+
+    -- Set preview item info
+    BoPConfirmFrame.icon:SetTexture("Interface\\Icons\\INV_Sword_04");
+    BoPConfirmFrame.itemName:SetText("[Preview Epic Sword]");
+    local r, g, b = GetQualityColor(4); -- Epic
+    BoPConfirmFrame.itemName:SetTextColor(r, g, b);
+
+    UpdateBoPFramePosition();
+    BoPConfirmFrame:Show();
+end
+
+-- Hide BoP frame
+local function HideBoPFrame()
+    if BoPConfirmFrame then
+        BoPConfirmFrame:Hide();
+        pendingBoPSlot = nil;
+    end
+end
+
+-- Create draggable preview area for BoP frame
+local function CreateBoPPreviewAreaFrame()
+    if BoPPreviewAreaFrame then return BoPPreviewAreaFrame; end
+
+    local frame = CreateFrame("Frame", "ScrollingLootBoPPreviewArea", UIParent);
+    frame:SetSize(280, 150);
+    frame:SetFrameStrata("DIALOG");
+    frame:SetFrameLevel(150);
+    frame:EnableMouse(true);
+    frame:SetMovable(true);
+    frame:SetClampedToScreen(true);
+    frame:Hide();
+
+    -- Light blue hover highlight
+    frame.highlight = frame:CreateTexture(nil, "BACKGROUND");
+    frame.highlight:SetAllPoints();
+    frame.highlight:SetColorTexture(0.2, 0.5, 0.8, 0.25);
+    frame.highlight:Hide();
+
+    -- Border
+    frame.border = frame:CreateTexture(nil, "BORDER");
+    frame.border:SetPoint("TOPLEFT", -2, 2);
+    frame.border:SetPoint("BOTTOMRIGHT", 2, -2);
+    frame.border:SetColorTexture(0.3, 0.6, 1.0, 0.6);
+    frame.border:Hide();
+
+    -- Inner area
+    frame.inner = frame:CreateTexture(nil, "BORDER", nil, 1);
+    frame.inner:SetAllPoints();
+    frame.inner:SetColorTexture(0, 0, 0, 0);
+    frame.inner:Hide();
+
+    -- Hover handlers
+    frame:SetScript("OnEnter", function(self)
+        self.highlight:Show();
+        self.border:Show();
+        self.inner:Show();
+        SetCursor("Interface\\CURSOR\\UI-Cursor-Move");
+    end);
+
+    frame:SetScript("OnLeave", function(self)
+        if not self.isDragging then
+            self.highlight:Hide();
+            self.border:Hide();
+            self.inner:Hide();
+        end
+        SetCursor(nil);
+    end);
+
+    -- Drag handlers
+    frame:RegisterForDrag("LeftButton");
+
+    frame:SetScript("OnDragStart", function(self)
+        self.isDragging = true;
+        self.highlight:Show();
+        self.border:Show();
+        self.inner:Show();
+        self:StartMoving();
+    end);
+
+    local function UpdateOffsetFromFrame(self)
+        local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+        local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+        local centerX = screenWidth / 2;
+        local centerY = screenHeight / 2;
+
+        local left = self:GetLeft();
+        local bottom = self:GetBottom();
+        local width = self:GetWidth();
+        local height = self:GetHeight();
+
+        local frameCenterX = left + width / 2;
+        local frameCenterY = bottom + height / 2;
+
+        db.bopFrameOffsetX = frameCenterX - centerX;
+        db.bopFrameOffsetY = frameCenterY - centerY;
+
+        -- Update actual BoP frame position
+        UpdateBoPFramePosition();
+    end
+
+    frame:SetScript("OnUpdate", function(self)
+        if self.isDragging then
+            UpdateOffsetFromFrame(self);
+        end
+    end);
+
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing();
+        self.isDragging = false;
+
+        if not self:IsMouseOver() then
+            self.highlight:Hide();
+            self.border:Hide();
+            self.inner:Hide();
+        end
+
+        UpdateOffsetFromFrame(self);
+
+        -- Round to nearest 5
+        db.bopFrameOffsetX = floor(db.bopFrameOffsetX / 5 + 0.5) * 5;
+        db.bopFrameOffsetY = floor(db.bopFrameOffsetY / 5 + 0.5) * 5;
+    end);
+
+    BoPPreviewAreaFrame = frame;
+    return frame;
+end
+
+-- Update BoP preview area position
+local function UpdateBoPPreviewAreaPosition()
+    if not BoPPreviewAreaFrame then return; end
+
+    local screenWidth = GetScreenWidth() * UIParent:GetEffectiveScale();
+    local screenHeight = GetScreenHeight() * UIParent:GetEffectiveScale();
+    local centerX = screenWidth / 2;
+    local centerY = screenHeight / 2;
+
+    BoPPreviewAreaFrame:ClearAllPoints();
+    BoPPreviewAreaFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT",
+        centerX + db.bopFrameOffsetX,
+        centerY + db.bopFrameOffsetY);
+end
+
+-- Show BoP preview area
+local function ShowBoPPreviewArea()
+    if not BoPPreviewAreaFrame then
+        CreateBoPPreviewAreaFrame();
+    end
+    UpdateBoPPreviewAreaPosition();
+    BoPPreviewAreaFrame:Show();
+    ShowBoPPreview();
+end
+
+-- Hide BoP preview area
+local function HideBoPPreviewArea()
+    if BoPPreviewAreaFrame then
+        BoPPreviewAreaFrame:Hide();
+    end
+    HideBoPFrame();
+end
+
+-- Hook the LOOT_BIND StaticPopup to use our custom frame
+local originalLootBindOnShow = nil;
+
+local function SetupBoPHook()
+    if not StaticPopupDialogs or not StaticPopupDialogs["LOOT_BIND"] then
+        return;
+    end
+
+    -- Store original OnShow if it exists
+    originalLootBindOnShow = StaticPopupDialogs["LOOT_BIND"].OnShow;
+
+    -- Hook StaticPopup_Show for LOOT_BIND
+    hooksecurefunc("StaticPopup_Show", function(which, text_arg1, text_arg2, data)
+        if which == "LOOT_BIND" and db.fastLoot then
+            -- Hide the default popup
+            StaticPopup_Hide("LOOT_BIND");
+
+            -- Get the slot from LootFrame
+            local slot = LootFrame.selectedSlot;
+            if slot then
+                local texture, item, quantity, currencyID, quality = GetLootSlotInfo(slot);
+                ShowBoPConfirmation(slot, item, texture, quality);
+            end
+        end
+    end);
+end
 
 --------------------------------------------------------------------------------
 -- Options GUI (Ace3-Style)
@@ -957,8 +1331,14 @@ local function CreateOptionsFrame()
     fastLootCheckbox:SetValue(db.fastLoot);
     fastLootCheckbox.OnValueChanged = function(self, value)
         db.fastLoot = value;
+        -- Show/hide BoP preview based on Fast Loot state
+        if value then
+            ShowBoPPreviewArea();
+        else
+            HideBoPPreviewArea();
+        end
     end;
-    fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nHold SHIFT while looting to show the window normally.";
+    fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nBind-on-Pickup confirmations show item icon and name.\nHold SHIFT while looting to show the window normally.";
     fastLootCheckbox.checkbox:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
         GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
@@ -1036,11 +1416,48 @@ local function CreateOptionsFrame()
     animLabel:SetTextColor(1, 0.82, 0);
     yOffset = yOffset - 25;
 
-    -- Forward declare fadeSlider so speedSlider can reference it
+    -- Forward declare sliders so staticModeCheckbox can reference them
     local fadeSlider;
+    local distSlider;
 
-    -- Scroll speed slider
-    local speedSlider = CreateSlider(rightCol, "Scroll Duration (seconds)", 1, 10, 0.5, 200);
+    -- Static mode checkbox
+    local staticModeCheckbox = CreateCheckbox(rightCol, "Static Mode (no scrolling)", 200);
+    staticModeCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    staticModeCheckbox:SetValue(db.staticMode);
+    staticModeCheckbox.OnValueChanged = function(self, value)
+        db.staticMode = value;
+        -- Grey out Scroll Distance when static mode is enabled
+        if distSlider then
+            if value then
+                distSlider.slider:SetAlpha(0.5);
+                distSlider.slider:EnableMouse(false);
+                distSlider.editBox:SetAlpha(0.5);
+                distSlider.editBox:EnableMouse(false);
+                distSlider.labelText:SetAlpha(0.5);
+            else
+                distSlider.slider:SetAlpha(1);
+                distSlider.slider:EnableMouse(true);
+                distSlider.editBox:SetAlpha(1);
+                distSlider.editBox:EnableMouse(true);
+                distSlider.labelText:SetAlpha(1);
+            end
+        end
+        -- Update preview area size/position for the new mode
+        UpdatePreviewAreaPosition();
+    end;
+    staticModeCheckbox.checkbox.tooltipText = "Items appear in place and fade out without scrolling upward.";
+    staticModeCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    staticModeCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
+    yOffset = yOffset - 30;
+
+    -- Scroll speed slider (renamed label based on mode would be nice but keeping simple)
+    local speedSlider = CreateSlider(rightCol, "Display Duration (seconds)", 1, 10, 0.5, 200);
     speedSlider:SetPoint("TOPLEFT", 0, yOffset);
     speedSlider:SetValue(db.scrollSpeed);
     speedSlider.OnValueChanged = function(self, value)
@@ -1067,7 +1484,7 @@ local function CreateOptionsFrame()
     yOffset = yOffset - 55;
 
     -- Scroll distance slider
-    local distSlider = CreateSlider(rightCol, "Scroll Distance (pixels)", 50, 400, 10, 200);
+    distSlider = CreateSlider(rightCol, "Scroll Distance (pixels)", 50, 400, 10, 200);
     distSlider:SetPoint("TOPLEFT", 0, yOffset);
     distSlider:SetValue(db.scrollDistance);
     distSlider.OnValueChanged = function(self, value)
@@ -1075,6 +1492,14 @@ local function CreateOptionsFrame()
         -- Update preview area size to match new scroll distance
         UpdatePreviewAreaPosition();
     end;
+    -- Grey out if static mode is already enabled
+    if db.staticMode then
+        distSlider.slider:SetAlpha(0.5);
+        distSlider.slider:EnableMouse(false);
+        distSlider.editBox:SetAlpha(0.5);
+        distSlider.editBox:EnableMouse(false);
+        distSlider.labelText:SetAlpha(0.5);
+    end
 
     -- Bottom buttons
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
@@ -1104,29 +1529,43 @@ local function CreateOptionsFrame()
         maxMsgSlider:SetValue(db.maxMessages);
         iconSlider:SetValue(db.iconSize);
         fontSlider:SetValue(db.fontSize);
+        staticModeCheckbox:SetValue(db.staticMode);
         speedSlider:SetValue(db.scrollSpeed);
         fadeSlider:SetValue(db.fadeStartTime);
         distSlider:SetValue(db.scrollDistance);
-        -- Update preview area position
+        -- Re-enable distSlider since staticMode defaults to false
+        distSlider.slider:SetAlpha(1);
+        distSlider.slider:EnableMouse(true);
+        distSlider.editBox:SetAlpha(1);
+        distSlider.editBox:EnableMouse(true);
+        distSlider.labelText:SetAlpha(1);
+        -- Update preview area positions
         UpdatePreviewAreaPosition();
+        UpdateBoPPreviewAreaPosition();
+        UpdateBoPFramePosition();
         print("|cff00ff00ScrollingLoot|r settings reset to defaults.");
     end);
 
     -- Live preview info text
     local previewInfo = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
     previewInfo:SetPoint("BOTTOM", 0, 18);
-    previewInfo:SetText("Drag the blue highlighted area to reposition loot");
+    previewInfo:SetText("Drag the blue highlighted areas to reposition loot and BoP dialog");
     previewInfo:SetTextColor(0.7, 0.7, 0.7);
 
-    -- OnShow/OnHide for live preview and draggable area
+    -- OnShow/OnHide for live preview and draggable areas
     frame:SetScript("OnShow", function()
         StartLivePreview();
         ShowPreviewArea();
+        -- Only show BoP preview if Fast Loot is enabled
+        if db.fastLoot then
+            ShowBoPPreviewArea();
+        end
     end);
 
     frame:SetScript("OnHide", function()
         StopLivePreview();
         HidePreviewArea();
+        HideBoPPreviewArea();
     end);
 
     -- ESC to close
@@ -1205,7 +1644,8 @@ local function OnEvent(self, event, ...)
         end
 
     elseif event == "PLAYER_LOGIN" then
-        -- Additional initialization if needed
+        -- Setup BoP confirmation hook
+        SetupBoPHook();
     end
 end
 

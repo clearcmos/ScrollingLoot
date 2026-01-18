@@ -10,13 +10,14 @@ Built for WoW Classic Anniversary Edition (2.5.5).
 - Shows item icons alongside item names
 - Colors item names by rarity (grey, white, green, blue, purple, orange)
 - Displays stack quantities for multi-item loots
-- Auto-loot items instantly and completely hide the loot window (hold SHIFT to show normally)
-- Open options and drag the highlighted area to reposition loot text in real-time
+- **Fast Loot mode**: Auto-loot items instantly and completely hide the loot window (hold SHIFT to show normally)
+- **Enhanced BoP confirmation**: Custom Bind-on-Pickup dialog shows item icon and name (when Fast Loot enabled)
+- **Drag-to-position**: Open options and drag the highlighted areas to reposition loot text and BoP dialog
 - Minimum quality filter to reduce clutter
 - Adjustable font and icon sizes
+- **Static Mode**: Optional mode where items fade in place without scrolling
 - Configurable scroll speed, distance, and fade timing
 - Optional background rectangle behind loot text
-- Smooth fade-out animation
 - Live preview while configuring
 
 ## Installation
@@ -47,13 +48,18 @@ Open the options panel with `/sloot` to configure:
 - **Max Simultaneous Messages** - Limit how many loot messages show at once
 - **Icon Size** - Adjust item icon size
 - **Font Size** - Adjust text size
-- **Scroll Duration** - How long messages stay on screen
+- **Static Mode** - Items fade in place without scrolling upward
+- **Display Duration** - How long messages stay on screen
 - **Fade Start Time** - When the fade-out begins
-- **Scroll Distance** - How far messages scroll upward
+- **Scroll Distance** - How far messages scroll upward (disabled in Static Mode)
 
 ### Positioning
 
-While the options panel is open, a **blue highlighted area** appears over the preview messages. Simply **drag this area** to reposition where loot notifications appear on your screen. The preview messages move in real-time as you drag.
+While the options panel is open, **blue highlighted areas** appear over the preview elements:
+- **Loot notifications**: Drag to reposition where scrolling loot text appears
+- **BoP confirmation dialog**: Drag to reposition the Bind-on-Pickup confirmation popup
+
+Both previews move in real-time as you drag.
 
 ## Quality Values
 
