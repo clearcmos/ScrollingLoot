@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.3
+
+**Improvements:**
+
+- **Full Inventory Handling** - When Fast Loot is enabled but inventory is full, the loot window now shows normally (instead of being hidden) to provide proper visual feedback
+- When loot window is shown due to full inventory, master loot, or SHIFT override, the default BoP confirmation popup is used instead of the custom one
+
 ## v1.0.2
 
 **New Features:**

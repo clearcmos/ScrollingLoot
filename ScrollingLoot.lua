@@ -603,6 +603,21 @@ end
 
 local FastLootFrame = CreateFrame("Frame");
 local fastLootDelay = 0;
+-- Track when loot window is shown due to exception (master loot or full inventory)
+-- When true, use default BoP popup instead of custom one
+local usingDefaultLootBehavior = false;
+
+-- Check if player has at least one free inventory slot
+local function HasFreeInventorySlot()
+    local GetNumFreeSlots = C_Container and C_Container.GetContainerNumFreeSlots or GetContainerNumFreeSlots;
+    for bag = 0, 4 do
+        local freeSlots = GetNumFreeSlots(bag);
+        if freeSlots and freeSlots > 0 then
+            return true;
+        end
+    end
+    return false;
+end
 
 -- Perform fast looting of all items
 local function DoFastLoot()
@@ -636,26 +651,46 @@ end
 
 -- Handle loot events
 local function FastLoot_OnEvent(self, event, ...)
+    if event == "LOOT_CLOSED" then
+        -- Reset state when loot window closes
+        usingDefaultLootBehavior = false;
+        return;
+    end
+
     if not db.fastLoot then return; end
 
     -- SHIFT override: show loot window normally
-    if IsShiftKeyDown() then return; end
+    if IsShiftKeyDown() then
+        usingDefaultLootBehavior = true;
+        return;
+    end
 
     if event == "LOOT_OPENED" then
-        -- Don't hide if master loot has items to distribute
+        -- Check if master loot has items to distribute
+        local hasMasterLootItems = false;
         local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
         if lootMethod == 2 then
             local lootThreshold = GetLootThreshold();
             for i = 1, GetNumLootItems() do
                 local _, _, _, _, quality = GetLootSlotInfo(i);
                 if quality and lootThreshold and quality >= lootThreshold then
-                    -- Has master loot items above threshold - don't hide window
-                    return;
+                    hasMasterLootItems = true;
+                    break;
                 end
             end
         end
 
+        -- Check if inventory is full
+        local inventoryFull = not HasFreeInventorySlot();
+
+        -- If master loot items or inventory full, show loot window normally
+        if hasMasterLootItems or inventoryFull then
+            usingDefaultLootBehavior = true;
+            return;
+        end
+
         -- Safe to hide the loot frame
+        usingDefaultLootBehavior = false;
         if LootFrame and LootFrame:IsShown() then
             LootFrame:Hide();
         end
@@ -667,6 +702,7 @@ end
 
 FastLootFrame:RegisterEvent("LOOT_OPENED");
 FastLootFrame:RegisterEvent("LOOT_READY");
+FastLootFrame:RegisterEvent("LOOT_CLOSED");
 FastLootFrame:SetScript("OnEvent", FastLoot_OnEvent);
 
 --------------------------------------------------------------------------------
@@ -972,7 +1008,9 @@ local function SetupBoPHook()
 
     -- Hook StaticPopup_Show for LOOT_BIND
     hooksecurefunc("StaticPopup_Show", function(which, text_arg1, text_arg2, data)
-        if which == "LOOT_BIND" and db.fastLoot then
+        -- Only use custom popup when Fast Loot is enabled AND we're not in default behavior mode
+        -- (default behavior = loot window shown due to master loot, full inventory, or SHIFT override)
+        if which == "LOOT_BIND" and db.fastLoot and not usingDefaultLootBehavior then
             -- Hide the default popup
             StaticPopup_Hide("LOOT_BIND");
 
