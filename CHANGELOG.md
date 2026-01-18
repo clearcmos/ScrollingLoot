@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.2
+
+**Bug Fixes:**
+
+- Fixed optional background not being vertically centered around loot text
+
 ## v1.0.1
 
 **New Features:**
