@@ -40,6 +40,19 @@ local tonumber = tonumber;
 local floor = math.floor;
 local min = math.min;
 local max = math.max;
+local gsub = string.gsub;
+
+-- Build localized pattern for "You receive loot:" from LOOT_ITEM_SELF
+-- LOOT_ITEM_SELF is "You receive loot: %s" in English, localized in other languages
+local function BuildLootSelfPattern()
+    -- LOOT_ITEM_SELF format: "You receive loot: %s" (where %s is the item link)
+    local pattern = LOOT_ITEM_SELF or "You receive loot: %s";
+    -- Escape Lua pattern special characters, then replace %s with (.+)
+    pattern = gsub(pattern, "([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1");
+    pattern = gsub(pattern, "%%%%s", "(.+)");
+    return "^" .. pattern;
+end
+local LOOT_SELF_PATTERN = BuildLootSelfPattern();
 
 -- Item quality colors (fallback if API unavailable)
 local QUALITY_COLORS = {
@@ -1752,9 +1765,9 @@ local function OnEvent(self, event, ...)
         local message = ...;
 
         -- Only show items that enter YOUR inventory
-        -- "You receive loot:" is the specific message when an item goes to your bags
+        -- Uses localized LOOT_ITEM_SELF pattern (e.g., "You receive loot: %s" in English)
         -- This filters out: other players looting, items being rolled on, etc.
-        if not strmatch(message, "^You receive loot:") then
+        if not strmatch(message, LOOT_SELF_PATTERN) then
             return;
         end
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4
+
+**Bug Fixes:**
+
+- **Localization Support** - Fixed loot notifications not appearing for non-English clients. Now uses WoW's localized `LOOT_ITEM_SELF` pattern instead of hardcoded English text.
+
 ## v1.0.3
 
 **Improvements:**
