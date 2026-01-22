@@ -1,84 +1,82 @@
 # ScrollingLoot
 
-Displays looted items as scrolling text notifications with icons, fully configurable via an intuitive options panel with drag-to-position support.
+**ScrollingLoot** displays your looted items as elegant scrolling text with icons. No more squinting at chat logs to see what you picked up when you have fast loot enabled!
 
-Built for WoW Classic Anniversary Edition (2.5.5).
+Built specifically for **TBC Classic Anniversary**.
+
+![Options - Drag Frame](https://github.com/clearcmos/ScrollingLoot/blob/main/assets/image1.png?raw=true)
+
+---
 
 ## Features
 
-- Displays loot as scrolling text anywhere on your screen
-- Shows item icons alongside item names
-- Colors item names by rarity (grey, white, green, blue, purple, orange)
-- Displays stack quantities for multi-item loots
-- **Fast Loot mode**: Auto-loot items instantly and completely hide the loot window (hold SHIFT to show normally)
-- **Enhanced BoP confirmation**: Custom Bind-on-Pickup dialog shows item icon and name (when Fast Loot enabled)
-- **Drag-to-position**: Open options and drag the highlighted areas to reposition loot text and BoP dialog
-- Minimum quality filter to reduce clutter
-- Adjustable font and icon sizes
-- **Static Mode**: Optional mode where items fade in place without scrolling
-- **Glow Effect**: Optional glowing highlight around item icons based on quality
-- Configurable scroll speed, distance, and fade timing
-- Optional background rectangle behind loot text
-- Live preview while configuring
+- **Floating notifications** - Items scroll upward (or fade in place with Static Mode) with smooth animations, positionable anywhere on screen
+- **Item icons** - Each notification includes the item's icon for quick recognition
+- **Quality colors** - Text is colored by item rarity (grey → white → green → blue → purple → orange)
+- **Stack counts** - Shows quantity for multi-item loots (e.g., "Wool Cloth x5")
+- **Money notifications** - Gold, silver, and copper pickups display with appropriate coin icons
+- **Honor notifications** - Honor point gains display with faction-appropriate PvP icons (Horde/Alliance) and customizable text color
+- **Fast Loot mode** - Auto-loot items instantly and completely hide the loot window (hold SHIFT to show window normally)
+- **Enhanced BoP confirmation** - Custom Bind-on-Pickup dialog shows item icon and name (when Fast Loot enabled)
+- **Drag-to-position** - Reposition loot notifications and BoP dialog by simply dragging them in real-time
+- **Live preview** - See your changes instantly while configuring
+- **Quality filter** - Hide low-quality items to reduce clutter
+- **Optional background** - Add a subtle dark background behind text for better visibility
+- **Glow effect** - Optional glowing highlight around item icons based on quality threshold
+- **Fully configurable** - Adjust icon size, font size, scroll speed, fade timing, and more
 
-## Installation
+---
 
-1. Download or clone this repository
-2. Copy the `ScrollingLoot` folder to your `Interface/AddOns/` directory
-3. Restart WoW or type `/reload`
+## Usage
 
-## Commands
+Type `/sloot` to open the options panel. **Blue highlighted areas** will appear over the preview elements - simply **drag them** to reposition where your loot notifications and BoP confirmation dialog appear.
 
-- `/sloot` - Open options GUI (with live preview and drag-to-position)
-- `/sloot test` - Display test messages
-- `/sloot on` - Enable the addon
-- `/sloot off` - Disable the addon
-- `/sloot reset` - Reset all settings to defaults
-- `/sloot help` - Show available commands
+### Slash Commands
 
-## Configuration
+- `/sloot` - Open options panel
+- `/sloot test` - Show test notifications
+- `/sloot on` - Enable addon
+- `/sloot off` - Disable addon
+- `/sloot reset` - Reset to defaults
 
-Open the options panel with `/sloot` to configure:
+---
 
-- **Enable/Disable** - Toggle the addon on/off
-- **Show Stack Counts** - Display quantity for multi-item loots
-- **Show Background** - Optional dark background behind loot text
-- **Fast Loot (hide window)** - Auto-loot items and hide loot window; hold SHIFT while looting to show normally
-- **Background Opacity** - Adjust background transparency
-- **Glow Effect** - Enable glowing highlight around item icons
-- **Glow Min Quality** - Minimum quality for glow effect to appear
-- **Notifications Min Quality** - Filter out items below a certain rarity
-- **Max Simultaneous Messages** - Limit how many loot messages show at once
-- **Icon Size** - Adjust item icon size
-- **Font Size** - Adjust text size
-- **Static Mode** - Items fade in place without scrolling upward
-- **Display Duration** - How long messages stay on screen
-- **Fade Start Time** - When the fade-out begins
-- **Scroll Distance** - How far messages scroll upward (disabled in Static Mode)
+## Configuration Options
 
-### Positioning
+**General**
+- Enable/Disable addon
+- Show stack counts
+- Show background behind text
+- Show money pickups (gold/silver/copper with coin icons)
+- Show honor points (with faction PvP icons and customizable color)
+- Fast Loot (hide window) - auto-loot and hide loot window; hold SHIFT to show normally
+- Background opacity
+- Glow effect toggle
+- Glow minimum quality threshold
+- Notifications minimum quality filter
+- Max simultaneous messages
 
-While the options panel is open, **blue highlighted areas** appear over the preview elements:
-- **Loot notifications**: Drag to reposition where scrolling loot text appears
-- **BoP confirmation dialog**: Drag to reposition the Bind-on-Pickup confirmation popup
+**Appearance**
+- Icon size
+- Font size
 
-Both previews move in real-time as you drag.
+**Animation**
+- Static Mode (items fade in place without scrolling)
+- Display duration (how long messages stay visible)
+- Fade start time
+- Scroll distance (disabled in Static Mode)
 
-## Quality Values
+**Position**
+- Drag the preview area to set position (no sliders needed!)
 
-| Value | Quality |
-|-------|---------|
-| 0 | Poor (grey) |
-| 1 | Common (white) |
-| 2 | Uncommon (green) |
-| 3 | Rare (blue) |
-| 4 | Epic (purple) |
-| 5 | Legendary (orange) |
-
-## Saved Variables
-
-Settings are saved per-account in `ScrollingLootDB`.
+---
 
 ## License
 
-MIT License - See [LICENSE.md](LICENSE.md)
+MIT License - Open source and free to use.
+
+---
+
+## Feedback & Issues
+
+Found a bug or have a suggestion? Post a comment / message me on CurseForge, or open an issue on GitHub: https://github.com/clearcmos/ScrollingLoot

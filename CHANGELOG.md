@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.5
+
+**New Features:**
+
+- **Money Notifications** - Display gold, silver, and copper pickups as scrolling notifications with appropriate coin icons. Shows formatted amounts like "1g 50s 25c". Enabled by default. Supports all client languages.
+- **Honor Point Notifications** - Display honor point gains as scrolling notifications with faction-appropriate PvP banner icons (Horde/Alliance). Enabled by default.
+- **Honor Text Color Picker** - Customize the color of honor notifications via a color picker in the options panel. Only honor previews are shown while picking a color.
+- New slash commands: `/sloot testmoney` and `/sloot testhonor` to preview the new notification types.
+
 ## v1.0.4
 
 **Bug Fixes:**

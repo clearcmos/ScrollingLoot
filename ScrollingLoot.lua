@@ -24,6 +24,9 @@ local DEFAULT_SETTINGS = {
     bopFrameOffsetY = 100,      -- BoP confirmation frame Y offset from center
     glowEnabled = false,        -- Enable glow effect on loot notifications
     glowMinQuality = 0,         -- Minimum quality for glow (0 = all)
+    showMoney = true,           -- Show money pickups (gold, silver, copper)
+    showHonor = true,           -- Show honor points gained
+    honorColor = { r = 0.8, g = 0.2, b = 1.0 },  -- Honor text color (default purple)
 };
 
 -- Local references for performance
@@ -75,6 +78,9 @@ local db;
 local livePreviewActive = false;
 local livePreviewTimer = 0;
 local LIVE_PREVIEW_INTERVAL = 1.5; -- Spawn new preview every 1.5 seconds
+
+-- Track when honor color picker is active (for preview filtering)
+local honorColorPickerActive = false;
 
 -- Draggable preview area frame
 local PreviewAreaFrame = nil;
@@ -172,6 +178,12 @@ local function ReleaseMessageFrame(frame)
     frame.background:Hide();
     frame.glowAnimGroup:Stop();
     frame.glow:SetAlpha(0);
+    -- Reset icon anchor to default (in case it was modified by honor messages)
+    frame.icon:ClearAllPoints();
+    frame.icon:SetPoint("LEFT", 0, 0);
+    -- Reset text anchor to default
+    frame.text:ClearAllPoints();
+    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", 4, 0);
     tinsert(messagePool, frame);
 end
 
@@ -330,29 +342,6 @@ local function AddLootMessage(itemName, itemIcon, itemQuality, quantity)
     AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, false);
 end
 
--- Add a preview message (always shows regardless of enabled state)
-local function AddPreviewMessage()
-    local qualities = {2, 3, 4, 5};
-    local quality = qualities[math.random(1, #qualities)];
-    local icons = {
-        "Interface\\Icons\\INV_Misc_Gem_01",
-        "Interface\\Icons\\INV_Misc_Gem_02",
-        "Interface\\Icons\\INV_Sword_04",
-        "Interface\\Icons\\INV_Helmet_01",
-        "Interface\\Icons\\INV_Jewelry_Ring_14",
-    };
-    local names = {
-        "[Preview Epic Item]",
-        "[Preview Rare Sword]",
-        "[Preview Uncommon Helm]",
-        "[Preview Legendary Ring]",
-        "[Preview Blue Gem]",
-    };
-
-    local idx = math.random(1, #icons);
-    AddLootMessageInternal(names[idx], icons[idx], quality, 1, true);
-end
-
 -- Parse item link to extract info
 local function ParseItemLink(itemLink)
     if not itemLink then return nil; end
@@ -386,6 +375,334 @@ local function ParseLootMessage(message)
     quantity = quantity and tonumber(quantity) or 1;
 
     return itemLink, quantity;
+end
+
+--------------------------------------------------------------------------------
+-- Money Display Functions
+--------------------------------------------------------------------------------
+
+-- Constants for money conversion
+local COPPER_PER_SILVER = 100;
+local SILVER_PER_GOLD = 100;
+local COPPER_PER_GOLD = COPPER_PER_SILVER * SILVER_PER_GOLD;
+
+-- Icons for currency (copper/silver/gold coins)
+-- 01-02 = gold, 03-04 = silver, 05-06 = copper
+local GOLD_ICON = "Interface\\Icons\\INV_Misc_Coin_01";
+local SILVER_ICON = "Interface\\Icons\\INV_Misc_Coin_03";
+local COPPER_ICON = "Interface\\Icons\\INV_Misc_Coin_05";
+
+-- Honor icons (faction-specific square PvP banner icons from Icons folder)
+local HORDE_HONOR_ICON = "Interface\\Icons\\INV_BannerPVP_01";
+local ALLIANCE_HONOR_ICON = "Interface\\Icons\\INV_BannerPVP_02";
+
+-- Get faction-appropriate honor icon
+local function GetHonorIcon()
+    local faction = UnitFactionGroup("player");
+    if faction == "Horde" then
+        return HORDE_HONOR_ICON;
+    else
+        return ALLIANCE_HONOR_ICON;
+    end
+end
+
+-- Get appropriate coin icon based on amount
+local function GetMoneyIcon(copper)
+    if copper >= COPPER_PER_GOLD then
+        return GOLD_ICON;
+    elseif copper >= COPPER_PER_SILVER then
+        return SILVER_ICON;
+    else
+        return COPPER_ICON;
+    end
+end
+
+-- Money color (golden/yellow)
+local MONEY_COLOR = { r = 1.0, g = 0.82, b = 0.0 };
+
+-- Honor color is now configurable via db.honorColor
+
+-- Track previous money for delta calculation
+local previousMoney = nil;
+
+-- Build localized patterns for parsing money from chat messages
+-- GOLD_AMOUNT, SILVER_AMOUNT, COPPER_AMOUNT are localized strings like "%d Gold"
+local function BuildMoneyPattern(formatString)
+    -- Escape Lua pattern special characters, then replace %d with (%d+)
+    local pattern = gsub(formatString, "([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1");
+    pattern = gsub(pattern, "%%%%d", "(%%d+)");
+    return pattern;
+end
+
+local GOLD_PATTERN = BuildMoneyPattern(GOLD_AMOUNT or "%d Gold");
+local SILVER_PATTERN = BuildMoneyPattern(SILVER_AMOUNT or "%d Silver");
+local COPPER_PATTERN = BuildMoneyPattern(COPPER_AMOUNT or "%d Copper");
+
+-- Parse money from chat message text (e.g., "You loot 7 Silver, 23 Copper")
+-- Returns total copper amount, or nil if parsing fails
+local function ParseMoneyFromText(message)
+    if not message then return nil; end
+
+    local gold = tonumber(strmatch(message, GOLD_PATTERN)) or 0;
+    local silver = tonumber(strmatch(message, SILVER_PATTERN)) or 0;
+    local copper = tonumber(strmatch(message, COPPER_PATTERN)) or 0;
+
+    local total = (gold * COPPER_PER_GOLD) + (silver * COPPER_PER_SILVER) + copper;
+
+    return total > 0 and total or nil;
+end
+
+-- Format money amount into readable string (e.g., "1g 50s 25c")
+local function FormatMoneyText(copper)
+    local gold = floor(copper / COPPER_PER_GOLD);
+    local silver = floor((copper - (gold * COPPER_PER_GOLD)) / COPPER_PER_SILVER);
+    local copperLeft = copper % COPPER_PER_SILVER;
+
+    local parts = {};
+    if gold > 0 then
+        tinsert(parts, gold .. "g");
+    end
+    if silver > 0 then
+        tinsert(parts, silver .. "s");
+    end
+    if copperLeft > 0 or #parts == 0 then
+        tinsert(parts, copperLeft .. "c");
+    end
+
+    return table.concat(parts, " ");
+end
+
+-- Add a money notification
+local function AddMoneyMessage(copperAmount, isPreview)
+    if not isPreview and not db.enabled then return; end
+    if not isPreview and not db.showMoney then return; end
+    if copperAmount <= 0 then return; end
+
+    -- Limit active messages
+    while #activeMessages >= db.maxMessages do
+        local oldFrame = tremove(activeMessages, 1);
+        ReleaseMessageFrame(oldFrame);
+    end
+
+    local frame = AcquireMessageFrame();
+    frame.isPreview = isPreview;
+
+    -- Set icon based on denomination
+    frame.icon:SetTexture(GetMoneyIcon(copperAmount));
+    frame.icon:SetSize(db.iconSize, db.iconSize);
+
+    -- Calculate text gap
+    local textGap = 4;
+
+    -- Set text with money color
+    local displayText = FormatMoneyText(copperAmount);
+    frame.text:SetText(displayText);
+    frame.text:SetTextColor(MONEY_COLOR.r, MONEY_COLOR.g, MONEY_COLOR.b);
+    frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
+    frame.text:ClearAllPoints();
+    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
+
+    -- Configure background
+    if db.showBackground then
+        local textWidth = frame.text:GetStringWidth();
+        local contentWidth = db.iconSize + textGap + textWidth + 8;
+        local contentHeight = max(db.iconSize, db.fontSize + 4);
+        local padding = 6;
+
+        local minWidth = 180;
+        local bgWidth = max(minWidth, contentWidth + (padding * 2));
+
+        frame.background:ClearAllPoints();
+        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
+        frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
+        frame.background:Show();
+    else
+        frame.background:Hide();
+    end
+
+    -- Calculate stack offset
+    local contentHeight = max(db.iconSize, db.fontSize + 4);
+    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
+
+    frame.stackOffsetY = 0;
+    for _, existingFrame in ipairs(activeMessages) do
+        local existingY;
+        if db.staticMode then
+            existingY = existingFrame.stackOffsetY;
+        else
+            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
+            local existingScrollOffset = db.scrollDistance * existingProgress;
+            existingY = existingFrame.stackOffsetY + existingScrollOffset;
+        end
+
+        local overlap = frame.stackOffsetY - existingY;
+        if overlap > -stackSpacing and overlap < stackSpacing then
+            frame.stackOffsetY = existingY - stackSpacing;
+        end
+    end
+
+    -- Position and show
+    frame.scrollTime = 0;
+    local x, y = CalculatePosition(frame);
+    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
+    if db.staticMode then
+        frame:SetAlpha(0);
+    else
+        frame:SetAlpha(1);
+    end
+    frame:Show();
+
+    tinsert(activeMessages, frame);
+end
+
+-- Add an honor notification
+local function AddHonorMessage(honorAmount, isPreview)
+    if not isPreview and not db.enabled then return; end
+    if not isPreview and not db.showHonor then return; end
+    if honorAmount <= 0 then return; end
+
+    -- Limit active messages
+    while #activeMessages >= db.maxMessages do
+        local oldFrame = tremove(activeMessages, 1);
+        ReleaseMessageFrame(oldFrame);
+    end
+
+    local frame = AcquireMessageFrame();
+    frame.isPreview = isPreview;
+
+    -- Set faction-appropriate honor icon (proper square icons, same size as items)
+    frame.icon:SetTexture(GetHonorIcon());
+    frame.icon:SetSize(db.iconSize, db.iconSize);
+
+    -- Position text after icon (same as items)
+    local textGap = 4;
+    local displayText = "+" .. honorAmount .. " Honor";
+    frame.text:SetText(displayText);
+    frame.text:SetTextColor(db.honorColor.r, db.honorColor.g, db.honorColor.b);
+    frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
+    frame.text:ClearAllPoints();
+    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
+
+    -- Configure background (same as items)
+    if db.showBackground then
+        local textWidth = frame.text:GetStringWidth();
+        local contentWidth = db.iconSize + textGap + textWidth + 8;
+        local contentHeight = max(db.iconSize, db.fontSize + 4);
+        local padding = 6;
+
+        local minWidth = 180;
+        local bgWidth = max(minWidth, contentWidth + (padding * 2));
+
+        frame.background:ClearAllPoints();
+        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
+        frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
+        frame.background:Show();
+    else
+        frame.background:Hide();
+    end
+
+    -- Calculate stack offset (same as items)
+    local contentHeight = max(db.iconSize, db.fontSize + 4);
+    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
+
+    frame.stackOffsetY = 0;
+    for _, existingFrame in ipairs(activeMessages) do
+        local existingY;
+        if db.staticMode then
+            existingY = existingFrame.stackOffsetY;
+        else
+            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
+            local existingScrollOffset = db.scrollDistance * existingProgress;
+            existingY = existingFrame.stackOffsetY + existingScrollOffset;
+        end
+
+        local overlap = frame.stackOffsetY - existingY;
+        if overlap > -stackSpacing and overlap < stackSpacing then
+            frame.stackOffsetY = existingY - stackSpacing;
+        end
+    end
+
+    -- Position and show
+    frame.scrollTime = 0;
+    local x, y = CalculatePosition(frame);
+    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
+    if db.staticMode then
+        frame:SetAlpha(0);
+    else
+        frame:SetAlpha(1);
+    end
+    frame:Show();
+
+    tinsert(activeMessages, frame);
+end
+
+-- Parse honor amount from chat message
+local function ParseHonorMessage(message)
+    if not message then return nil; end
+
+    -- Honor messages typically look like "+15 Honor" or "You have gained 15 honor."
+    -- Try to extract the number
+    local honor = strmatch(message, "%+?(%d+)%s*[Hh]onor");
+    if honor then
+        return tonumber(honor);
+    end
+
+    -- Alternative pattern for "X honorable kill" or similar
+    honor = strmatch(message, "(%d+)");
+    if honor then
+        return tonumber(honor);
+    end
+
+    return nil;
+end
+
+-- Add a preview message (always shows regardless of enabled state)
+local function AddPreviewMessage()
+    -- If honor color picker is open, only show honor previews
+    if honorColorPickerActive then
+        local honorAmounts = {15, 25, 50, 100, 200};
+        AddHonorMessage(honorAmounts[math.random(1, #honorAmounts)], true);
+        return;
+    end
+
+    -- Randomly decide what type of preview to show
+    -- Weight towards items but occasionally show money/honor when enabled
+    local previewType = math.random(1, 10);
+
+    if previewType <= 2 and db.showMoney then
+        -- Show money preview (20% chance when enabled)
+        local moneyAmounts = {12345, 5000, 250, 50000, 100};
+        AddMoneyMessage(moneyAmounts[math.random(1, #moneyAmounts)], true);
+        return;
+    elseif previewType <= 4 and db.showHonor then
+        -- Show honor preview (20% chance when enabled)
+        local honorAmounts = {15, 25, 50, 100, 200};
+        AddHonorMessage(honorAmounts[math.random(1, #honorAmounts)], true);
+        return;
+    end
+
+    -- Default: show item preview
+    local qualities = {2, 3, 4, 5};
+    local quality = qualities[math.random(1, #qualities)];
+    local icons = {
+        "Interface\\Icons\\INV_Misc_Gem_01",
+        "Interface\\Icons\\INV_Misc_Gem_02",
+        "Interface\\Icons\\INV_Sword_04",
+        "Interface\\Icons\\INV_Helmet_01",
+        "Interface\\Icons\\INV_Jewelry_Ring_14",
+    };
+    local names = {
+        "[Preview Epic Item]",
+        "[Preview Rare Sword]",
+        "[Preview Uncommon Helm]",
+        "[Preview Legendary Ring]",
+        "[Preview Blue Gem]",
+    };
+
+    local idx = math.random(1, #icons);
+    AddLootMessageInternal(names[idx], icons[idx], quality, 1, true);
 end
 
 -- Fade-in duration for static mode (seconds)
@@ -1204,6 +1521,132 @@ local function CreateCheckbox(parent, label, width)
     return container;
 end
 
+-- Create a color swatch widget that opens the color picker
+local function CreateColorSwatch(parent, label, width)
+    local container = CreateFrame("Frame", nil, parent);
+    container:SetSize(width or 200, 24);
+
+    -- Color swatch button
+    local swatch = CreateFrame("Button", nil, container);
+    swatch:SetSize(20, 20);
+    swatch:SetPoint("LEFT");
+
+    -- Solid color fill (the main color display)
+    local swatchColor = swatch:CreateTexture(nil, "BACKGROUND");
+    swatchColor:SetPoint("TOPLEFT", 2, -2);
+    swatchColor:SetPoint("BOTTOMRIGHT", -2, 2);
+    swatchColor:SetColorTexture(1, 1, 1, 1);
+
+    -- Border frame (dark outline around the color)
+    local borderTop = swatch:CreateTexture(nil, "ARTWORK");
+    borderTop:SetColorTexture(0.3, 0.3, 0.3, 1);
+    borderTop:SetPoint("TOPLEFT", 0, 0);
+    borderTop:SetPoint("TOPRIGHT", 0, 0);
+    borderTop:SetHeight(2);
+
+    local borderBottom = swatch:CreateTexture(nil, "ARTWORK");
+    borderBottom:SetColorTexture(0.3, 0.3, 0.3, 1);
+    borderBottom:SetPoint("BOTTOMLEFT", 0, 0);
+    borderBottom:SetPoint("BOTTOMRIGHT", 0, 0);
+    borderBottom:SetHeight(2);
+
+    local borderLeft = swatch:CreateTexture(nil, "ARTWORK");
+    borderLeft:SetColorTexture(0.3, 0.3, 0.3, 1);
+    borderLeft:SetPoint("TOPLEFT", 0, 0);
+    borderLeft:SetPoint("BOTTOMLEFT", 0, 0);
+    borderLeft:SetWidth(2);
+
+    local borderRight = swatch:CreateTexture(nil, "ARTWORK");
+    borderRight:SetColorTexture(0.3, 0.3, 0.3, 1);
+    borderRight:SetPoint("TOPRIGHT", 0, 0);
+    borderRight:SetPoint("BOTTOMRIGHT", 0, 0);
+    borderRight:SetWidth(2);
+
+    -- Label
+    local labelText = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    labelText:SetPoint("LEFT", swatch, "RIGHT", 6, 0);
+    labelText:SetText(label);
+
+    container.swatch = swatch;
+    container.swatchColor = swatchColor;
+    container.labelText = labelText;
+
+    -- Current color storage
+    container.r = 1;
+    container.g = 1;
+    container.b = 1;
+
+    function container:SetColor(r, g, b)
+        self.r = r;
+        self.g = g;
+        self.b = b;
+        swatchColor:SetColorTexture(r, g, b, 1);
+    end
+
+    function container:GetColor()
+        return self.r, self.g, self.b;
+    end
+
+    -- Track if we've hooked the OnHide
+    local onHideHooked = false;
+
+    -- Click handler to open color picker
+    swatch:SetScript("OnClick", function()
+        -- Notify that color picker is opening (for preview filtering)
+        if container.OnPickerOpened then
+            container:OnPickerOpened();
+        end
+
+        local info = {
+            r = container.r,
+            g = container.g,
+            b = container.b,
+            swatchFunc = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB();
+                container:SetColor(r, g, b);
+                if container.OnColorChanged then
+                    container:OnColorChanged(r, g, b);
+                end
+            end,
+            cancelFunc = function()
+                local r, g, b = ColorPickerFrame:GetPreviousValues();
+                container:SetColor(r, g, b);
+                if container.OnColorChanged then
+                    container:OnColorChanged(r, g, b);
+                end
+            end,
+            hasOpacity = false,
+        };
+        ColorPickerFrame:SetupColorPickerAndShow(info);
+
+        -- Hook the OnHide once to detect when picker closes
+        if not onHideHooked then
+            onHideHooked = true;
+            ColorPickerFrame:HookScript("OnHide", function()
+                if container.OnPickerClosed then
+                    container:OnPickerClosed();
+                end
+            end);
+        end
+    end);
+
+    -- Highlight on hover (brighten border)
+    swatch:SetScript("OnEnter", function(self)
+        borderTop:SetColorTexture(0.6, 0.6, 0.4, 1);
+        borderBottom:SetColorTexture(0.6, 0.6, 0.4, 1);
+        borderLeft:SetColorTexture(0.6, 0.6, 0.4, 1);
+        borderRight:SetColorTexture(0.6, 0.6, 0.4, 1);
+    end);
+    swatch:SetScript("OnLeave", function(self)
+        borderTop:SetColorTexture(0.3, 0.3, 0.3, 1);
+        borderBottom:SetColorTexture(0.3, 0.3, 0.3, 1);
+        borderLeft:SetColorTexture(0.3, 0.3, 0.3, 1);
+        borderRight:SetColorTexture(0.3, 0.3, 0.3, 1);
+    end);
+
+    return container;
+end
+
 -- Create a dropdown widget (Ace3 style)
 local function CreateDropdown(parent, label, options, width)
     local container = CreateFrame("Frame", nil, parent);
@@ -1333,7 +1776,7 @@ local function CreateOptionsFrame()
 
     -- Main frame
     local frame = CreateFrame("Frame", "ScrollingLootOptionsFrame", UIParent, "BackdropTemplate");
-    frame:SetSize(500, 500);
+    frame:SetSize(500, 590);
     frame:SetPoint("CENTER");
     frame:SetBackdrop(FrameBackdrop);
     frame:SetBackdropColor(0, 0, 0, 1);
@@ -1386,7 +1829,7 @@ local function CreateOptionsFrame()
     -- Left column - General Settings
     local leftCol = CreateFrame("Frame", nil, content);
     leftCol:SetPoint("TOPLEFT");
-    leftCol:SetSize(220, 350);
+    leftCol:SetSize(220, 420);
 
     local generalLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
     generalLabel:SetPoint("TOPLEFT");
@@ -1420,6 +1863,86 @@ local function CreateOptionsFrame()
     bgCheckbox.OnValueChanged = function(self, value)
         db.showBackground = value;
     end;
+    yOffset = yOffset - 30;
+
+    -- Show money checkbox
+    local moneyCheckbox = CreateCheckbox(leftCol, "Show Money Pickups", 200);
+    moneyCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    moneyCheckbox:SetValue(db.showMoney);
+    moneyCheckbox.OnValueChanged = function(self, value)
+        db.showMoney = value;
+    end;
+    moneyCheckbox.checkbox.tooltipText = "Display gold, silver, and copper pickups as scrolling notifications.";
+    moneyCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    moneyCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
+    yOffset = yOffset - 30;
+
+    -- Forward declare honorColorSwatch so checkbox can reference it
+    local honorColorSwatch;
+
+    -- Show honor checkbox
+    local honorCheckbox = CreateCheckbox(leftCol, "Show Honor Points", 200);
+    honorCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    honorCheckbox:SetValue(db.showHonor);
+    honorCheckbox.OnValueChanged = function(self, value)
+        db.showHonor = value;
+        -- Grey out honor color swatch when disabled
+        if honorColorSwatch then
+            if value then
+                honorColorSwatch:SetAlpha(1);
+                honorColorSwatch.swatch:EnableMouse(true);
+            else
+                honorColorSwatch:SetAlpha(0.5);
+                honorColorSwatch.swatch:EnableMouse(false);
+            end
+        end
+    end;
+    honorCheckbox.checkbox.tooltipText = "Display honor point gains as scrolling notifications.";
+    honorCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    honorCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
+    yOffset = yOffset - 30;
+
+    -- Honor color swatch
+    honorColorSwatch = CreateColorSwatch(leftCol, "Honor Text Color", 200);
+    honorColorSwatch:SetPoint("TOPLEFT", 20, yOffset);  -- Indented to show it's related to honor
+    honorColorSwatch:SetColor(db.honorColor.r, db.honorColor.g, db.honorColor.b);
+    honorColorSwatch.OnColorChanged = function(self, r, g, b)
+        db.honorColor.r = r;
+        db.honorColor.g = g;
+        db.honorColor.b = b;
+    end;
+    honorColorSwatch.OnPickerOpened = function(self)
+        honorColorPickerActive = true;
+    end;
+    honorColorSwatch.OnPickerClosed = function(self)
+        honorColorPickerActive = false;
+    end;
+    honorColorSwatch.swatch.tooltipText = "Click to choose the color for honor point notifications.";
+    honorColorSwatch.swatch:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    honorColorSwatch.swatch:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
+    -- Set initial greyed-out state based on showHonor
+    if not db.showHonor then
+        honorColorSwatch:SetAlpha(0.5);
+        honorColorSwatch.swatch:EnableMouse(false);
+    end
     yOffset = yOffset - 30;
 
     -- Fast loot checkbox
@@ -1661,14 +2184,27 @@ local function CreateOptionsFrame()
     resetBtn:SetPoint("BOTTOMLEFT", 20, 15);
     resetBtn:SetText("Reset Defaults");
     resetBtn:SetScript("OnClick", function()
-        -- Reset all settings
+        -- Reset all settings (deep copy for tables like honorColor)
         for key, value in pairs(DEFAULT_SETTINGS) do
-            db[key] = value;
+            if type(value) == "table" then
+                db[key] = {};
+                for k, v in pairs(value) do
+                    db[key][k] = v;
+                end
+            else
+                db[key] = value;
+            end
         end
         -- Update all widgets
         enabledCheckbox:SetValue(db.enabled);
         quantityCheckbox:SetValue(db.showQuantity);
         bgCheckbox:SetValue(db.showBackground);
+        moneyCheckbox:SetValue(db.showMoney);
+        honorCheckbox:SetValue(db.showHonor);
+        honorColorSwatch:SetColor(db.honorColor.r, db.honorColor.g, db.honorColor.b);
+        -- Enable honor color swatch since showHonor defaults to true
+        honorColorSwatch:SetAlpha(1);
+        honorColorSwatch.swatch:EnableMouse(true);
         fastLootCheckbox:SetValue(db.fastLoot);
         bgOpacitySlider:SetValue(db.backgroundOpacity * 100);
         glowCheckbox:SetValue(db.glowEnabled);
@@ -1779,6 +2315,30 @@ local function OnEvent(self, event, ...)
             AddLootMessage(itemName, itemIcon, itemQuality or 1, quantity);
         end
 
+    elseif event == "CHAT_MSG_MONEY" then
+        -- Money looted - parse amount from chat message text
+        if db.showMoney then
+            local message = ...;
+            local moneyAmount = ParseMoneyFromText(message);
+            if moneyAmount and moneyAmount > 0 then
+                AddMoneyMessage(moneyAmount, false);
+            end
+        end
+
+    elseif event == "PLAYER_MONEY" then
+        -- Track money changes (kept for potential future use)
+        previousMoney = GetMoney();
+
+    elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then
+        -- Honor gained
+        if db.showHonor then
+            local message = ...;
+            local honor = ParseHonorMessage(message);
+            if honor and honor > 0 then
+                AddHonorMessage(honor, false);
+            end
+        end
+
     elseif event == "ADDON_LOADED" then
         local loadedAddon = ...;
         if loadedAddon == addonName then
@@ -1800,7 +2360,27 @@ local function OnEvent(self, event, ...)
             -- Copy defaults for any missing values
             for key, value in pairs(DEFAULT_SETTINGS) do
                 if ScrollingLootDB[key] == nil then
-                    ScrollingLootDB[key] = value;
+                    if type(value) == "table" then
+                        ScrollingLootDB[key] = {};
+                        for k, v in pairs(value) do
+                            ScrollingLootDB[key][k] = v;
+                        end
+                    else
+                        ScrollingLootDB[key] = value;
+                    end
+                end
+            end
+
+            -- Ensure honorColor has all required fields (for existing saves)
+            if ScrollingLootDB.honorColor then
+                if ScrollingLootDB.honorColor.r == nil then
+                    ScrollingLootDB.honorColor.r = DEFAULT_SETTINGS.honorColor.r;
+                end
+                if ScrollingLootDB.honorColor.g == nil then
+                    ScrollingLootDB.honorColor.g = DEFAULT_SETTINGS.honorColor.g;
+                end
+                if ScrollingLootDB.honorColor.b == nil then
+                    ScrollingLootDB.honorColor.b = DEFAULT_SETTINGS.honorColor.b;
                 end
             end
 
@@ -1813,6 +2393,8 @@ local function OnEvent(self, event, ...)
     elseif event == "PLAYER_LOGIN" then
         -- Setup BoP confirmation hook
         SetupBoPHook();
+        -- Initialize money tracker for accurate delta calculation
+        previousMoney = GetMoney();
     end
 end
 
@@ -1839,6 +2421,16 @@ local function SlashCommandHandler(msg)
         AddLootMessage("[Test Rare Item]", "Interface\\Icons\\INV_Misc_Gem_02", 3, 5);
         AddLootMessage("[Test Uncommon Item]", "Interface\\Icons\\INV_Misc_Gem_03", 2, 1);
 
+    elseif msg == "testmoney" then
+        AddMoneyMessage(12345, true);   -- 1g 23s 45c
+        AddMoneyMessage(500, true);      -- 5s
+        AddMoneyMessage(15, true);       -- 15c
+
+    elseif msg == "testhonor" then
+        AddHonorMessage(15, true);
+        AddHonorMessage(50, true);
+        AddHonorMessage(100, true);
+
     elseif msg == "reset" then
         for key, value in pairs(DEFAULT_SETTINGS) do
             db[key] = value;
@@ -1848,7 +2440,9 @@ local function SlashCommandHandler(msg)
     elseif msg == "help" then
         print("|cff00ff00ScrollingLoot|r commands:");
         print("  |cff00ffff/sloot|r - Open options panel (with live preview)");
-        print("  |cff00ffff/sloot test|r - Show test messages");
+        print("  |cff00ffff/sloot test|r - Show test loot messages");
+        print("  |cff00ffff/sloot testmoney|r - Show test money messages");
+        print("  |cff00ffff/sloot testhonor|r - Show test honor messages");
         print("  |cff00ffff/sloot on/off|r - Enable/disable addon");
         print("  |cff00ffff/sloot reset|r - Reset to defaults");
 
@@ -1866,8 +2460,14 @@ SlashCmdList["SCROLLINGLOOT"] = SlashCommandHandler;
 ScrollingLoot:SetScript("OnUpdate", OnUpdate);
 ScrollingLoot:SetScript("OnEvent", OnEvent);
 ScrollingLoot:RegisterEvent("CHAT_MSG_LOOT");
+ScrollingLoot:RegisterEvent("CHAT_MSG_MONEY");
+ScrollingLoot:RegisterEvent("PLAYER_MONEY");
+ScrollingLoot:RegisterEvent("CHAT_MSG_COMBAT_HONOR_GAIN");
 ScrollingLoot:RegisterEvent("ADDON_LOADED");
 ScrollingLoot:RegisterEvent("PLAYER_LOGIN");
 
 -- Initialize db with defaults (will be overwritten on ADDON_LOADED)
 db = DEFAULT_SETTINGS;
+
+-- Initialize money tracker
+previousMoney = GetMoney and GetMoney() or 0;
