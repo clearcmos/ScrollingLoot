@@ -27,6 +27,7 @@ local DEFAULT_SETTINGS = {
     showMoney = true,           -- Show money pickups (gold, silver, copper)
     showHonor = true,           -- Show honor points gained
     honorColor = { r = 0.8, g = 0.2, b = 1.0 },  -- Honor text color (default purple)
+    textAlign = "left",         -- Text alignment: "left", "center", or "right"
 };
 
 -- Local references for performance
@@ -81,6 +82,7 @@ local LIVE_PREVIEW_INTERVAL = 1.5; -- Spawn new preview every 1.5 seconds
 
 -- Track when honor color picker is active (for preview filtering)
 local honorColorPickerActive = false;
+
 
 -- Draggable preview area frame
 local PreviewAreaFrame = nil;
@@ -174,6 +176,7 @@ local function ReleaseMessageFrame(frame)
     frame:ClearAllPoints();
     frame.scrollTime = 0;
     frame.stackOffsetY = 0;
+    frame.contentWidth = nil;
     frame.isPreview = false;
     frame.background:Hide();
     frame.glowAnimGroup:Stop();
@@ -222,6 +225,18 @@ local function CalculatePosition(frame)
     local baseX = centerX + db.startOffsetX;
     local baseY = centerY + db.startOffsetY + frame.stackOffsetY;
 
+    -- Adjust x position based on text alignment
+    if frame.contentWidth then
+        if db.textAlign == "center" then
+            -- Center: offset by half the content width
+            baseX = baseX - (frame.contentWidth / 2);
+        elseif db.textAlign == "right" then
+            -- Right: offset by full content width so right edge aligns with target
+            baseX = baseX - frame.contentWidth;
+        end
+        -- Left: no offset needed (default)
+    end
+
     -- Add scroll progress (only if not in static mode)
     if not db.staticMode then
         local progress = frame.scrollTime / db.scrollSpeed;
@@ -268,19 +283,37 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     frame.text:ClearAllPoints();
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
 
+    -- Calculate and store content width (for center alignment)
+    local textWidth = frame.text:GetStringWidth();
+    frame.contentWidth = db.iconSize + textGap + textWidth;
+
     -- Configure background (hybrid: actual width with min/max bounds)
     if db.showBackground then
-        local textWidth = frame.text:GetStringWidth();
-        local contentWidth = db.iconSize + textGap + textWidth + 8; -- Extra 8px to ensure text is fully covered
+        local contentWidth = frame.contentWidth + 8; -- Extra 8px to ensure text is fully covered
         local contentHeight = max(db.iconSize, db.fontSize + 4);
         local padding = 6;
 
-        -- Minimum width for consistency, but no max - dynamically fits content
-        local minWidth = 180;
-        local bgWidth = max(minWidth, contentWidth + (padding * 2));
+        -- For center alignment, fit to content; for left/right alignment, use minimum width
+        local bgWidth;
+        if db.textAlign == "center" then
+            bgWidth = contentWidth + (padding * 2);
+        else
+            local minWidth = 180;
+            bgWidth = max(minWidth, contentWidth + (padding * 2));
+        end
 
         frame.background:ClearAllPoints();
-        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        if db.textAlign == "center" then
+            -- Center background around the content
+            local contentCenter = frame.contentWidth / 2;
+            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
+        elseif db.textAlign == "right" then
+            -- Right-align background to extend leftward from content
+            frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
+        else
+            -- Left-align (default)
+            frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        end
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
         frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
         frame.background:Show();
@@ -502,18 +535,37 @@ local function AddMoneyMessage(copperAmount, isPreview)
     frame.text:ClearAllPoints();
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
 
+    -- Calculate and store content width (for center alignment)
+    local textWidth = frame.text:GetStringWidth();
+    frame.contentWidth = db.iconSize + textGap + textWidth;
+
     -- Configure background
     if db.showBackground then
-        local textWidth = frame.text:GetStringWidth();
-        local contentWidth = db.iconSize + textGap + textWidth + 8;
+        local contentWidth = frame.contentWidth + 8;
         local contentHeight = max(db.iconSize, db.fontSize + 4);
         local padding = 6;
 
-        local minWidth = 180;
-        local bgWidth = max(minWidth, contentWidth + (padding * 2));
+        -- For center alignment, fit to content; for left/right alignment, use minimum width
+        local bgWidth;
+        if db.textAlign == "center" then
+            bgWidth = contentWidth + (padding * 2);
+        else
+            local minWidth = 180;
+            bgWidth = max(minWidth, contentWidth + (padding * 2));
+        end
 
         frame.background:ClearAllPoints();
-        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        if db.textAlign == "center" then
+            -- Center background around the content
+            local contentCenter = frame.contentWidth / 2;
+            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
+        elseif db.textAlign == "right" then
+            -- Right-align background to extend leftward from content
+            frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
+        else
+            -- Left-align (default)
+            frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        end
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
         frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
         frame.background:Show();
@@ -584,18 +636,37 @@ local function AddHonorMessage(honorAmount, isPreview)
     frame.text:ClearAllPoints();
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
 
+    -- Calculate and store content width (for center alignment)
+    local textWidth = frame.text:GetStringWidth();
+    frame.contentWidth = db.iconSize + textGap + textWidth;
+
     -- Configure background (same as items)
     if db.showBackground then
-        local textWidth = frame.text:GetStringWidth();
-        local contentWidth = db.iconSize + textGap + textWidth + 8;
+        local contentWidth = frame.contentWidth + 8;
         local contentHeight = max(db.iconSize, db.fontSize + 4);
         local padding = 6;
 
-        local minWidth = 180;
-        local bgWidth = max(minWidth, contentWidth + (padding * 2));
+        -- For center alignment, fit to content; for left/right alignment, use minimum width
+        local bgWidth;
+        if db.textAlign == "center" then
+            bgWidth = contentWidth + (padding * 2);
+        else
+            local minWidth = 180;
+            bgWidth = max(minWidth, contentWidth + (padding * 2));
+        end
 
         frame.background:ClearAllPoints();
-        frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        if db.textAlign == "center" then
+            -- Center background around the content
+            local contentCenter = frame.contentWidth / 2;
+            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
+        elseif db.textAlign == "right" then
+            -- Right-align background to extend leftward from content
+            frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
+        else
+            -- Left-align (default)
+            frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
+        end
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
         frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
         frame.background:Show();
@@ -894,20 +965,38 @@ local function UpdatePreviewAreaPosition()
     local x = centerX + db.startOffsetX;
     local y = centerY + db.startOffsetY;
 
+    local frameWidth = 380;
+
     if db.staticMode then
         -- Static mode: items spawn at y and stack DOWNWARD (negative Y)
         -- Anchor from TOPLEFT so frame extends downward to contain all items
         local staticHeight = 150; -- Enough for ~4 stacked items + padding for glow/background
-        PreviewAreaFrame:SetSize(380, staticHeight);
+        PreviewAreaFrame:SetSize(frameWidth, staticHeight);
         PreviewAreaFrame:ClearAllPoints();
-        -- Position TOP of frame above spawn point (+30 padding for background/glow)
-        PreviewAreaFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 25, y + 30);
+        if db.textAlign == "center" then
+            -- Center the frame horizontally around the target position
+            PreviewAreaFrame:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, y + 30);
+        elseif db.textAlign == "right" then
+            -- Right-align: frame extends leftward from target position
+            PreviewAreaFrame:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", x + 25, y + 30);
+        else
+            -- Left-align (default): frame extends rightward from target position
+            PreviewAreaFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 25, y + 30);
+        end
     else
         -- Scroll mode: frame covers the scroll distance
-        PreviewAreaFrame:SetSize(380, db.scrollDistance + 60);
+        PreviewAreaFrame:SetSize(frameWidth, db.scrollDistance + 60);
         PreviewAreaFrame:ClearAllPoints();
-        -- Messages scroll UP from spawn point, so bottom of frame at spawn point
-        PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 25, y - 20);
+        if db.textAlign == "center" then
+            -- Center the frame horizontally around the target position
+            PreviewAreaFrame:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", x, y - 20);
+        elseif db.textAlign == "right" then
+            -- Right-align: frame extends leftward from target position
+            PreviewAreaFrame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMLEFT", x + 25, y - 20);
+        else
+            -- Left-align (default): frame extends rightward from target position
+            PreviewAreaFrame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 25, y - 20);
+        end
     end
 end
 
@@ -2076,6 +2165,30 @@ local function CreateOptionsFrame()
     fontSlider.OnValueChanged = function(self, value)
         db.fontSize = value;
     end;
+    yOffset = yOffset - 55;
+
+    -- Text alignment dropdown
+    local alignOptions = {
+        { value = "left", text = "Left" },
+        { value = "center", text = "Center" },
+        { value = "right", text = "Right" },
+    };
+    local alignDropdown = CreateDropdown(rightCol, "Text Alignment", alignOptions, 200);
+    alignDropdown:SetPoint("TOPLEFT", 0, yOffset);
+    alignDropdown:SetValue(db.textAlign);
+    alignDropdown.OnValueChanged = function(self, value)
+        db.textAlign = value;
+        UpdatePreviewAreaPosition();
+    end;
+    alignDropdown.dropdown.tooltipText = "Left: notifications anchored to left edge.\nCenter: notifications centered on screen.\nRight: notifications anchored to right edge.";
+    alignDropdown.dropdown:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    alignDropdown.dropdown:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
     yOffset = yOffset - 55;
 
     -- Animation section

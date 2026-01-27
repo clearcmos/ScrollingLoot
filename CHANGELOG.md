@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.6
+
+**New Features:**
+
+- **Text Alignment Option** - New dropdown in Appearance settings to choose between "Left", "Center", and "Right" alignment. Center mode positions notifications centered on screen like scrolling combat text. Right mode anchors notifications to the right edge, mirroring the left mode.
+
 ## v1.0.5
 
 **New Features:**

@@ -59,6 +59,7 @@ Type `/sloot` to open the options panel. **Blue highlighted areas** will appear 
 **Appearance**
 - Icon size
 - Font size
+- Text alignment (Left, Center, Right)
 
 **Animation**
 - Static Mode (items fade in place without scrolling)
