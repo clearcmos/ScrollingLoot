@@ -1042,28 +1042,26 @@ end
 local function DoFastLoot()
     if GetTime() - fastLootDelay >= 0.3 then
         fastLootDelay = GetTime();
-        -- Check if auto-loot is effectively enabled (CVar XOR modifier key)
-        if GetCVarBool("autoLootDefault") ~= IsModifiedClick("AUTOLOOTTOGGLE") then
-            local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
-            if lootMethod == 2 then
-                -- Master loot enabled: only fast loot items below threshold
-                local lootThreshold = GetLootThreshold();
-                for i = GetNumLootItems(), 1, -1 do
-                    local _, _, _, _, quality, locked = GetLootSlotInfo(i);
-                    if quality and lootThreshold and quality < lootThreshold and not locked then
-                        LootSlot(i);
-                    end
-                end
-            else
-                -- Normal loot: fast loot everything
-                for i = GetNumLootItems(), 1, -1 do
-                    local _, _, _, _, _, locked = GetLootSlotInfo(i);
-                    if not locked then
-                        LootSlot(i);
-                    end
+        -- Fast Loot is already gated by db.fastLoot check in event handler
+        -- No need to check auto-loot CVar - addon setting takes precedence
+        local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
+        if lootMethod == 2 then
+            -- Master loot enabled: only fast loot items below threshold
+            local lootThreshold = GetLootThreshold();
+            for i = GetNumLootItems(), 1, -1 do
+                local _, _, _, _, quality, locked = GetLootSlotInfo(i);
+                if quality and lootThreshold and quality < lootThreshold and not locked then
+                    LootSlot(i);
                 end
             end
-            fastLootDelay = GetTime();
+        else
+            -- Normal loot: fast loot everything
+            for i = GetNumLootItems(), 1, -1 do
+                local _, _, _, _, _, locked = GetLootSlotInfo(i);
+                if not locked then
+                    LootSlot(i);
+                end
+            end
         end
     end
 end

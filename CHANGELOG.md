@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.7
+
+**Bug Fixes:**
+
+- **Fast Loot Independence** - Fast Loot now works regardless of the game's auto-loot CVar setting. Previously, Fast Loot required either the game's auto-loot option to be enabled or the auto-loot modifier key to be held. Now the addon's Fast Loot setting is sufficient on its own.
+
 ## v1.0.6
 
 **New Features:**
