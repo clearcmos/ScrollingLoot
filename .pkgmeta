@@ -7,4 +7,5 @@ ignore:
   - CLAUDE.md
   - .github
   - .gitignore
-  - "*.md"
+  - .pkgmeta
+  - assets
