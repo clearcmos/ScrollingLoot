@@ -1025,6 +1025,8 @@ local fastLootDelay = 0;
 -- Track when loot window is shown due to exception (master loot or full inventory)
 -- When true, use default BoP popup instead of custom one
 local usingDefaultLootBehavior = false;
+-- Track which slot FastLoot last attempted to loot (for BoP confirmation)
+local lastFastLootSlot = nil;
 
 -- Check if player has at least one free inventory slot
 local function HasFreeInventorySlot()
@@ -1039,8 +1041,8 @@ local function HasFreeInventorySlot()
 end
 
 -- Perform fast looting of all items
-local function DoFastLoot()
-    if GetTime() - fastLootDelay >= 0.3 then
+local function DoFastLoot(skipThrottle)
+    if skipThrottle or GetTime() - fastLootDelay >= 0.3 then
         fastLootDelay = GetTime();
         -- Fast Loot is already gated by db.fastLoot check in event handler
         -- No need to check auto-loot CVar - addon setting takes precedence
@@ -1051,6 +1053,7 @@ local function DoFastLoot()
             for i = GetNumLootItems(), 1, -1 do
                 local _, _, _, _, quality, locked = GetLootSlotInfo(i);
                 if quality and lootThreshold and quality < lootThreshold and not locked then
+                    lastFastLootSlot = i;
                     LootSlot(i);
                 end
             end
@@ -1059,6 +1062,7 @@ local function DoFastLoot()
             for i = GetNumLootItems(), 1, -1 do
                 local _, _, _, _, _, locked = GetLootSlotInfo(i);
                 if not locked then
+                    lastFastLootSlot = i;
                     LootSlot(i);
                 end
             end
@@ -1112,13 +1116,16 @@ local function FastLoot_OnEvent(self, event, ...)
             LootFrame:Hide();
         end
     elseif event == "LOOT_READY" then
-        -- Perform fast loot
         DoFastLoot();
+    elseif event == "LOOT_SLOT_CLEARED" then
+        -- Retry after each slot clears (e.g. containers with multiple items)
+        DoFastLoot(true);
     end
 end
 
 FastLootFrame:RegisterEvent("LOOT_OPENED");
 FastLootFrame:RegisterEvent("LOOT_READY");
+FastLootFrame:RegisterEvent("LOOT_SLOT_CLEARED");
 FastLootFrame:RegisterEvent("LOOT_CLOSED");
 FastLootFrame:SetScript("OnEvent", FastLoot_OnEvent);
 
@@ -1431,8 +1438,8 @@ local function SetupBoPHook()
             -- Hide the default popup
             StaticPopup_Hide("LOOT_BIND");
 
-            -- Get the slot from LootFrame
-            local slot = LootFrame.selectedSlot;
+            -- Get the slot from LootFrame (or from FastLoot tracking)
+            local slot = LootFrame.selectedSlot or lastFastLootSlot;
             if slot then
                 local texture, item, quantity, currencyID, quality = GetLootSlotInfo(slot);
                 ShowBoPConfirmation(slot, item, texture, quality);

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.8
+
+**Bug Fixes:**
+
+- **Fast Loot Container Fix** - Fixed items getting stuck when opening containers (e.g. Nolkai's Box) with Fast Loot enabled. Now retries looting remaining items after each slot clears instead of relying on a single pass.
+- **BoP Confirmation in Fast Loot** - Fixed custom Bind-on-Pickup confirmation dialog not appearing when Fast Loot auto-loots a BoP item. The addon now tracks the loot slot internally instead of relying on `LootFrame.selectedSlot` which is unset when the loot frame is hidden.
+
 ## v1.0.7
 
 **Bug Fixes:**
