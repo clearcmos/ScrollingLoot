@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.9
+
+**Bug Fixes:**
+
+- **Fast Loot Throttle Fix** - Fixed an issue where looting ground quest items (or any loot) in quick succession could silently fail, requiring a second interaction. The 0.3s anti-spam throttle now resets when a new loot window opens so it no longer blocks fresh loot attempts.
+
 ## v1.0.8
 
 **Bug Fixes:**

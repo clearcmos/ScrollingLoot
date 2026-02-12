@@ -2,7 +2,7 @@
 ## Title: Scrolling Loot
 ## Notes: Displays looted items as scrolling combat text with icons and quality colors
 ## Author: clearcmos
-## Version: 1.0.8
+## Version: 1.0.9
 ## SavedVariables: ScrollingLootDB
 
 ScrollingLoot.lua

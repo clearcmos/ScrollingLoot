@@ -1087,6 +1087,9 @@ local function FastLoot_OnEvent(self, event, ...)
     end
 
     if event == "LOOT_OPENED" then
+        -- Reset throttle for new loot window so fast successive loots aren't blocked
+        fastLootDelay = 0;
+
         -- Check if master loot has items to distribute
         local hasMasterLootItems = false;
         local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
