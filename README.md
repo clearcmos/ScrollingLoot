@@ -40,6 +40,7 @@ and battlegrounds is untested. Differences from Anniversary:
 - **Quality filter** - Hide low-quality items to reduce clutter
 - **Optional background** - Add a subtle dark background behind text for better visibility
 - **Glow effect** - Optional glowing highlight around item icons based on quality threshold
+- **Hover to pause** - Hovering a notification pauses the feed and shows the item's tooltip; clicks pass through to the game world
 - **Fully configurable** - Adjust icon size, font size, scroll speed, fade timing, and more
 
 ---
@@ -83,6 +84,7 @@ Type `/sloot` to open the options panel. **Blue highlighted areas** will appear 
 - Display duration (how long messages stay visible)
 - Fade start time
 - Scroll distance (disabled in Static Mode)
+- Hover to pause + tooltip (on by default)
 
 **Position**
 - Drag the preview area to set position (no sliders needed!)

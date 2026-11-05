@@ -123,6 +123,10 @@ Settings = {
     RegisterAddOnCategory = function(category) launcherCategory = category end,
 }
 SettingsPanel = object("SettingsPanel")
+GameTooltip = object("GameTooltip")
+function GameTooltip:SetOwner(owner) self.owner = owner end
+function GameTooltip:SetHyperlink(link) self.link = link end
+function GameTooltip:IsOwned(owner) return self.owner == owner end
 HideUIPanel = function(frame) frame:Hide() end
 local freeBagSlots = 10
 C_Container = { GetContainerNumFreeSlots = function() return freeBagSlots end }
@@ -433,6 +437,31 @@ test("the options window runs the live preview, without the custom bind-on-picku
     mark = #messages
     ScrollingLootFrame.scripts.OnUpdate(ScrollingLootFrame, 2)
     assert(#messages == mark, "no samples once the window is closed")
+end)
+
+test("hovering a notification pauses the feed, shows its tooltip and holds new pickups", function()
+    cached = true
+    chatLoot(2589)
+    local line
+    for _, value in ipairs(objects) do
+        if value.shown and value.scripts.OnEnter and value.text and value.text.textValue
+            and value.text.textValue:find("Linen Cloth", 1, true) then line = value end
+    end
+    assert(line, "feed line for the pickup")
+    line.scripts.OnEnter(line)
+    assert(GameTooltip.link == itemLink(2589) and GameTooltip.shown, "item tooltip shown")
+    ScrollingLootFrame.scripts.OnUpdate(ScrollingLootFrame, 100)
+    assert(line.shown, "paused line does not expire")
+    local mark = #messages
+    chatLoot(4306)
+    assert(#messages == mark, "new pickup waits while paused")
+    line.scripts.OnLeave(line)
+    assert(not GameTooltip.shown, "tooltip hidden on leave")
+    finishLoad(function() advance(0.2) end)
+    assert(shownSince(mark):find("Silk Cloth", 1, true), "held pickup shown after leaving")
+    ScrollingLootFrame.scripts.OnUpdate(ScrollingLootFrame, 100)
+    assert(not line.shown, "feed runs again")
+    advance(10)
 end)
 
 test("Anniversary retains its defaults, Fast Loot events and custom bind dialog", function()

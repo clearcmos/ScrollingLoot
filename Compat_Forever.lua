@@ -51,7 +51,7 @@ function Compat.EmitItem(link, quantity, emit)
         local name, _, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(link)
         if not Compat.Accessible(name) or not Compat.Accessible(icon)
             or not Compat.Accessible(quality) then return end
-        if name and icon and quality then emit(name, icon, quality, quantity) end
+        if name and icon and quality then emit(name, icon, quality, quantity, link) end
     end
     -- Keep the full link, so suffixes and bonus variants retain their item names.
     local item = Item:CreateFromItemLink(link)

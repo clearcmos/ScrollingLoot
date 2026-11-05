@@ -6,6 +6,8 @@
 
 - **WoW Forever Support (Experimental)** - The same download now loads on WoW Forever through its own TOC, listed as "Scrolling Loot (Forever Experimental)". It defaults to a compact static feed, reads pickups from the loot window as well as chat (Forever can hide loot chat text from addons), uses Forever's own bind-on-pickup prompt, and adds an Options > AddOns entry that opens the options window. Behavior in groups, dungeons and battlegrounds is untested.
 
+- **Hover to Pause** - Hovering a notification pauses the feed at full opacity and shows the item's tooltip. Pickups that arrive meanwhile appear once the cursor leaves. Clicks still pass through to the game world. On by default; toggle it under Animation in the options.
+
 **Bug Fixes:**
 
 - **Fast Loot Second Loot** - Looting corpses in quick succession could hide the next corpse's loot window before anything was taken, so it needed a second loot. The v1.0.9 fix reset the throttle too late; it now clears when a loot window closes.

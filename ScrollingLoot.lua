@@ -29,6 +29,7 @@ local DEFAULT_SETTINGS = {
     showHonor = true,           -- Show honor points gained
     honorColor = { r = 0.8, g = 0.2, b = 1.0 },  -- Honor text color (default purple)
     textAlign = "left",         -- Text alignment: "left", "center", or "right"
+    hoverTooltips = true,       -- Hovering a notification pauses the feed and shows its item tooltip
 };
 
 if Compat.ConfigureDefaults then Compat.ConfigureDefaults(DEFAULT_SETTINGS); end
@@ -99,11 +100,67 @@ ScrollingLoot:SetFrameStrata("HIGH");
 -- Core Addon Functions
 --------------------------------------------------------------------------------
 
+-- Hover pause: hovering a notification freezes the feed at full opacity and
+-- shows its item tooltip. Pickups that arrive meanwhile wait until the cursor
+-- leaves, so the hovered line never moves or expires.
+local feedPaused = false;
+local hoveredMessage = nil;
+local pausedQueue = {};
+
+local function QueueWhilePaused(fn, ...)
+    local entry = { ... };
+    entry.fn = fn;
+    entry.n = select("#", ...);
+    pausedQueue[#pausedQueue + 1] = entry;
+end
+
+local function ResumeFeed()
+    if hoveredMessage or not feedPaused then return; end
+    feedPaused = false;
+    -- Static lines restart their fade instead of dropping back to a faded alpha
+    if db.staticMode then
+        local fadeStart = Compat.isForever and min(db.fadeStartTime, db.scrollSpeed - 0.1) or db.fadeStartTime;
+        for _, frame in ipairs(activeMessages) do
+            frame.scrollTime = min(frame.scrollTime, fadeStart);
+        end
+    end
+    local queued = pausedQueue;
+    pausedQueue = {};
+    for _, entry in ipairs(queued) do
+        entry.fn(unpack(entry, 1, entry.n));
+    end
+end
+
+local function MessageFrame_OnEnter(self)
+    if not db.hoverTooltips then return; end
+    hoveredMessage = self;
+    feedPaused = true;
+    if self.itemLink then
+        GameTooltip:SetOwner(self, db.textAlign == "right" and "ANCHOR_LEFT" or "ANCHOR_RIGHT");
+        GameTooltip:SetHyperlink(self.itemLink);
+        GameTooltip:Show();
+    end
+end
+
+local function MessageFrame_OnLeave(self)
+    if hoveredMessage == self then hoveredMessage = nil; end
+    if GameTooltip:IsOwned(self) then GameTooltip:Hide(); end
+    -- Short delay so moving between lines keeps the feed paused
+    C_Timer.After(0.1, ResumeFeed);
+end
+
 -- Create a message frame (icon + text + optional background)
 local function CreateMessageFrame()
     local frame = CreateFrame("Frame", nil, ScrollingLoot);
     frame:SetSize(300, 32);
     frame:Hide();
+
+    -- Hover only; clicks pass through to the game world
+    frame:SetMouseClickEnabled(false);
+    frame:SetMouseMotionEnabled(db.hoverTooltips and true or false);
+    frame:SetHitRectInsets(-6, -6, -6, -6);
+    frame:SetScript("OnEnter", MessageFrame_OnEnter);
+    frame:SetScript("OnLeave", MessageFrame_OnLeave);
 
     -- Background texture (behind everything) - sized dynamically
     frame.background = frame:CreateTexture(nil, "BACKGROUND");
@@ -181,6 +238,12 @@ local function ReleaseMessageFrame(frame)
     frame.stackOffsetY = 0;
     frame.contentWidth = nil;
     frame.isPreview = false;
+    frame.itemLink = nil;
+    if hoveredMessage == frame then
+        hoveredMessage = nil;
+        if GameTooltip:IsOwned(frame) then GameTooltip:Hide(); end
+        C_Timer.After(0, ResumeFeed);
+    end
     frame.background:Hide();
     frame.glowAnimGroup:Stop();
     frame.glow:SetAlpha(0);
@@ -191,6 +254,13 @@ local function ReleaseMessageFrame(frame)
     frame.text:ClearAllPoints();
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", 4, 0);
     tinsert(messagePool, frame);
+end
+
+-- Apply the hover setting to every existing notification frame
+local function ApplyHoverSetting()
+    local enabled = db.hoverTooltips and true or false;
+    for _, frame in ipairs(activeMessages) do frame:SetMouseMotionEnabled(enabled); end
+    for _, frame in ipairs(messagePool) do frame:SetMouseMotionEnabled(enabled); end
 end
 
 -- Get quality color
@@ -251,9 +321,13 @@ local function CalculatePosition(frame)
 end
 
 -- Add a loot message to display (internal, skips enabled check for preview)
-local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, isPreview)
+local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, isPreview, itemLink)
     if not isPreview and not db.enabled then return; end
     if not isPreview and itemQuality < db.minQuality then return; end
+    if feedPaused then
+        QueueWhilePaused(AddLootMessageInternal, itemName, itemIcon, itemQuality, quantity, isPreview, itemLink);
+        return;
+    end
 
     -- Limit active messages
     while #activeMessages >= db.maxMessages do
@@ -263,6 +337,7 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
 
     local frame = AcquireMessageFrame();
     frame.isPreview = isPreview;
+    frame.itemLink = itemLink;
 
     -- Set icon
     frame.icon:SetTexture(itemIcon);
@@ -289,6 +364,8 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
     -- Calculate and store content width (for center alignment)
     local textWidth = frame.text:GetStringWidth();
     frame.contentWidth = db.iconSize + textGap + textWidth;
+    -- Hover area matches the icon and text
+    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
 
     -- Configure background (hybrid: actual width with min/max bounds)
     if db.showBackground then
@@ -374,8 +451,8 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
 end
 
 -- Add a loot message to display (public API)
-local function AddLootMessage(itemName, itemIcon, itemQuality, quantity)
-    AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, false);
+local function AddLootMessage(itemName, itemIcon, itemQuality, quantity, itemLink)
+    AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, false, itemLink);
 end
 
 -- Parse item link to extract info
@@ -513,6 +590,10 @@ local function AddMoneyMessage(copperAmount, isPreview)
     if not isPreview and not db.enabled then return; end
     if not isPreview and not db.showMoney then return; end
     if copperAmount <= 0 then return; end
+    if feedPaused then
+        QueueWhilePaused(AddMoneyMessage, copperAmount, isPreview);
+        return;
+    end
 
     -- Limit active messages
     while #activeMessages >= db.maxMessages do
@@ -541,6 +622,8 @@ local function AddMoneyMessage(copperAmount, isPreview)
     -- Calculate and store content width (for center alignment)
     local textWidth = frame.text:GetStringWidth();
     frame.contentWidth = db.iconSize + textGap + textWidth;
+    -- Hover area matches the icon and text
+    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
 
     -- Configure background
     if db.showBackground then
@@ -616,6 +699,10 @@ local function AddHonorMessage(honorAmount, isPreview)
     if not isPreview and not db.enabled then return; end
     if not isPreview and not db.showHonor then return; end
     if honorAmount <= 0 then return; end
+    if feedPaused then
+        QueueWhilePaused(AddHonorMessage, honorAmount, isPreview);
+        return;
+    end
 
     -- Limit active messages
     while #activeMessages >= db.maxMessages do
@@ -642,6 +729,8 @@ local function AddHonorMessage(honorAmount, isPreview)
     -- Calculate and store content width (for center alignment)
     local textWidth = frame.text:GetStringWidth();
     frame.contentWidth = db.iconSize + textGap + textWidth;
+    -- Hover area matches the icon and text
+    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
 
     -- Configure background (same as items)
     if db.showBackground then
@@ -784,6 +873,14 @@ local STATIC_FADE_IN_DURATION = 0.3;
 
 -- OnUpdate handler for animation
 local function OnUpdate(self, elapsed)
+    -- Hover pause: hold every line in place at full opacity
+    if feedPaused then
+        for _, frame in ipairs(activeMessages) do
+            frame:SetAlpha(1);
+        end
+        return;
+    end
+
     -- Handle live preview spawning
     if livePreviewActive then
         livePreviewTimer = livePreviewTimer + elapsed;
@@ -2317,6 +2414,25 @@ local function CreateOptionsFrame()
         distSlider.editBox:EnableMouse(false);
         distSlider.labelText:SetAlpha(0.5);
     end
+    yOffset = yOffset - 55;
+
+    -- Hover pause checkbox
+    local hoverCheckbox = CreateCheckbox(rightCol, "Hover to Pause + Tooltip", 200);
+    hoverCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    hoverCheckbox:SetValue(db.hoverTooltips);
+    hoverCheckbox.OnValueChanged = function(self, value)
+        db.hoverTooltips = value and true or false;
+        ApplyHoverSetting();
+    end;
+    hoverCheckbox.checkbox.tooltipText = "Hovering a notification pauses the feed and shows the item's tooltip.\nClicks still pass through to the game world.";
+    hoverCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    hoverCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
 
     -- Bottom buttons
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
@@ -2374,6 +2490,8 @@ local function CreateOptionsFrame()
         distSlider.editBox:SetAlpha(1);
         distSlider.editBox:EnableMouse(true);
         distSlider.labelText:SetAlpha(1);
+        hoverCheckbox:SetValue(db.hoverTooltips);
+        ApplyHoverSetting();
         -- Update preview area positions
         UpdatePreviewAreaPosition();
         UpdateBoPPreviewAreaPosition();
@@ -2481,7 +2599,7 @@ local function OnEvent(self, event, ...)
         else
             local itemName, itemIcon, itemQuality = ParseItemLink(itemLink);
             if itemName and itemIcon then
-                AddLootMessage(itemName, itemIcon, itemQuality or 1, quantity);
+                AddLootMessage(itemName, itemIcon, itemQuality or 1, quantity, itemLink);
             end
         end
 

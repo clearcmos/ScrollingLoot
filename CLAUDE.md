@@ -19,6 +19,7 @@
 - **Honor notifications**: Honor point gains with faction PvP icons (Horde/Alliance) and customizable text color
 - Ace3-style options GUI (`/sloot` command)
 - Live preview while configuring (auto-spawns test messages)
+- **Hover to pause** (`hoverTooltips`, on by default): hovering a notification freezes the feed at full opacity and shows the item tooltip
 - **Drag-to-position**: Blue highlighted areas appear over previews; drag to reposition in real-time
 - **Fast Loot mode**: Auto-loot items instantly and completely hide loot window (SHIFT override to show normally)
 - **Enhanced BoP confirmation**: Custom Bind-on-Pickup dialog shows item icon and name (replaces generic popup when Fast Loot enabled)
@@ -31,6 +32,7 @@
 - Custom widget factory functions for sliders, checkboxes, dropdowns
 - Draggable preview area frames for real-time positioning (loot notifications + BoP dialog)
 - Messages store relative `stackOffsetY` (not absolute positions) so they follow when dragging
+- Hover pause: message frames are motion-enabled and click-disabled (clicks reach the world), sized to icon plus text with 6px hit insets. `MessageFrame_OnEnter` sets `feedPaused`, which stops `OnUpdate` timers and holds alpha at 1; new loot, money and honor messages are queued (`QueueWhilePaused`) so the hovered line never moves or expires. `MessageFrame_OnLeave` resumes after 0.1s unless another line is hovered; static-mode lines restart their fade. Item lines carry `itemLink` for `GameTooltip:SetHyperlink` (`Compat.EmitItem` passes the link on Forever). `ApplyHoverSetting` turns motion off on every frame when the option is off
 - Fast Loot system: `FastLootFrame` handles `LOOT_OPENED` (hide window) and `LOOT_READY` (auto-loot) events
 - Fast Loot throttle (0.3s) guards only against repeated `LOOT_READY` in one window. It clears on `LOOT_CLOSED`, and `LOOT_SLOT_CLEARED` retries bypass it without refreshing it. Hiding the window ends the loot session, so a stale throttle used to hide the next corpse's window before anything was taken, and the corpse needed a second loot (fixed in v1.1.0; commit `bec17db`'s reset on `LOOT_OPENED` came too late)
 - Full bags: `LOOT_OPENED` leaves the loot window up only when no bag slot is free and the loot has an item slot (`LootHasItem`), so empty and money-only loot stays hidden
@@ -83,7 +85,7 @@ Restored on 2026-11-04 (user request: restore what Forever does not already do):
 - Battleground honor still has only the chat source.
 
 Run `luac5.1 -p ScrollingLoot.lua Compat_Forever.lua` and `lua5.1 tests/forever.lua`.
-The 19 tests cover async item lookup, message ownership, restricted input, Fast
+The 20 tests cover hover pause (tooltip, held pickups, resume), async item lookup, message ownership, restricted input, Fast
 Loot event order, a corpse opened within the throttle of the previous one, the
 full-bags window rule (kept only when the loot has an item), the
 loot window source and its duplicate suppression (both
