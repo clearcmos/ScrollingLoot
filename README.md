@@ -2,18 +2,17 @@
 
 **ScrollingLoot** shows each item, money and honor pickup as a short notification with its icon, in a feed you can place anywhere on screen, so you do not have to read the chat log to see what you picked up.
 
-Built for **TBC Classic Anniversary**, with experimental **WoW Forever** support.
+Built for **TBC Classic Anniversary** and **WoW Forever**.
 
 On Anniversary it was last tested in game during the early phase (Karazhan and
-Magtheridon's Lair). The v1.1.0 changes (the Fast Loot fixes and hover to pause)
-have local tests but have not been tried on Anniversary in game; I have not had
-time to test there since.
+Magtheridon's Lair). The changes since then (the Fast Loot fixes, hover to pause,
+and repeated pickups adding up) have local tests but have not been tried on
+Anniversary in game; I have not had time to test there since.
 
-### WoW Forever (experimental)
+### WoW Forever
 
-The same download loads on WoW Forever, where it is listed as "Scrolling Loot
-(Forever Experimental)". It has been tested solo in the open world only. Groups,
-dungeons, raids, battlegrounds and boss fights are untested. In those places
+The same download loads on WoW Forever. It has been tested solo in the open
+world only. Groups, dungeons, raids, battlegrounds and boss fights are untested. In those places
 Forever can hide loot chat text from addons; ScrollingLoot then reads pickups
 from the loot window instead, but that has not been checked inside an instance
 yet, so the feed may miss loot there. Differences from Anniversary:
@@ -25,7 +24,7 @@ yet, so the feed may miss loot there. Differences from Anniversary:
 - Fast Loot (off by default) uses Forever's own bind-on-pickup prompt instead of
   the custom dialog.
 - The options window is the same as on Anniversary. The game's Options > AddOns >
-  Scrolling Loot (Experimental) entry has a button that opens it.
+  Scrolling Loot entry has a button that opens it.
 - Forever's own loot toasts are unchanged. If they overlap with the feed, turn off
   the game's Show Item Toasts setting.
 

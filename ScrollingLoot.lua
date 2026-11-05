@@ -1,5 +1,5 @@
 -- ScrollingLoot: Displays looted items as scrolling text with icons
--- Anniversary with an optional experimental Forever compatibility file
+-- Anniversary, with an optional Forever compatibility file
 
 local addonName, addon = ...
 local Compat = addon.Compat or {};

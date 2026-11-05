@@ -1,11 +1,17 @@
 # Changelog
 
-## Unreleased
+## v1.2.0
+
+**Testing note:** Repeats adding up and the line queue were tried in game on WoW Forever, not on Anniversary.
 
 **New Features:**
 
 - **Repeats Add Up** - Looting the same item again while its line is on screen adds to that line ("Linen Cloth x3") instead of opening a new one. Gold and honor add up the same way. In static mode the line also stays up for its full duration again; a scrolling line takes more only until it starts to fade.
 - **No Lost Lines** - When the feed holds its maximum number of lines, new pickups wait and appear as older lines expire, instead of pushing the oldest line out. Waiting pickups of the same item add up too.
+
+**Changes:**
+
+- **WoW Forever** - No longer labeled experimental: the AddOns list and the game's Options > AddOns entry now show plain "Scrolling Loot". Groups, dungeons, raids and battlegrounds on Forever are still untested.
 
 ## v1.1.0
 

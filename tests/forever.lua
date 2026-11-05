@@ -412,7 +412,7 @@ local function labelled(text)
 end
 
 test("the game's AddOns entry opens the options window and closes the game's panel", function()
-    assert(launcherCategory and launcherCategory.name == "Scrolling Loot (Experimental)")
+    assert(launcherCategory and launcherCategory.name == "Scrolling Loot")
     local button
     for _, value in ipairs(objects) do
         if value.parent == launcherPanel and value.scripts.OnClick then button = value end

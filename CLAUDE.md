@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**ScrollingLoot** is a WoW Classic Anniversary addon, with experimental WoW Forever support since v1.1.0, that displays looted items as animated scrolling text with icons near the center of the screen (similar to Diablo-style loot notifications).
+**ScrollingLoot** is a WoW Classic Anniversary addon, with WoW Forever support since v1.1.0, that displays looted items as animated scrolling text with icons near the center of the screen (similar to Diablo-style loot notifications).
 
 ### Key Files
 - `ScrollingLoot.lua` - Main addon code (all logic in single file), shared by both games
@@ -19,7 +19,7 @@
 - **Honor notifications**: Honor point gains with faction PvP icons (Horde/Alliance) and customizable text color
 - Ace3-style options GUI (`/sloot` command)
 - Live preview while configuring (auto-spawns test messages)
-- **Repeats add up and lines queue** (from the Unreleased changes, user confirmed in game 2026-11-05): a pickup of something already on screen adds to its line; past the maximum, new lines wait instead of pushing the oldest out
+- **Repeats add up and lines queue** (v1.2.0, user confirmed in game on Forever 2026-11-05): a pickup of something already on screen adds to its line; past the maximum, new lines wait instead of pushing the oldest out
 - **Hover to pause** (`hoverTooltips`, on by default): hovering a notification freezes the feed at full opacity and shows the item tooltip
 - **Drag-to-position**: Blue highlighted areas appear over previews; drag to reposition in real-time
 - **Fast Loot mode**: Loots every slot on `LOOT_READY` and hides the loot window (SHIFT shows it); the window stays open under master loot or when bags are full and the loot has an item
@@ -41,7 +41,7 @@
 - BoP confirmation: hooks `StaticPopup_Show("LOOT_BIND")` to show custom dialog with item icon/name
 - SavedVariables: `ScrollingLootDB`
 
-### WoW Forever (experimental, from v1.1.0)
+### WoW Forever (from v1.1.0)
 
 Started as a local experiment on 2026-10-31; packaged for release with v1.1.0.
 One package serves both games. Anniversary loads the base `ScrollingLoot.toc`.
@@ -49,9 +49,10 @@ The Forever client loads `ScrollingLoot_Camelot.toc` instead: the `_Camelot`
 suffix string is in Forever's `Wow.exe`, and the BigWigs packager maps that
 suffix and interface 16xxx to CurseForge's Forever game versions. That TOC loads
 `Compat_Forever.lua` before the shared source. Without the adapter, the shared
-source follows the Anniversary path. "Experimental" appears in the Forever TOC
-title, the README and the changelog; group, dungeon and battleground behavior is
-untested.
+source follows the Anniversary path. v1.1.0 labeled Forever support
+"Experimental" in the TOC title, the Options > AddOns entry, the README and the
+changelog; v1.2.0 dropped the label (user decision 2026-11-05). Group, dungeon
+and battleground behavior is still untested, and the README says so.
 
 Forever defaults: static feed, five messages, 22px icons, 14px text, four-second
 duration and a dark background. Native loot toasts are unchanged.
