@@ -14,6 +14,7 @@
 
 - **Fast Loot Second Loot** - Looting corpses in quick succession could hide the next corpse's loot window before anything was taken, so it needed a second loot. The v1.0.9 fix reset the throttle too late; it now clears when a loot window closes.
 - **Fast Loot With Full Bags** - With full bags, an empty corpse or money-only loot no longer flashes the loot window. The window stays open only when there is an item to pick up.
+- **Anniversary Patch 2.5.6** - The TOC now targets interface 20506, so the game no longer lists the addon as out of date.
 
 ## v1.0.9
 

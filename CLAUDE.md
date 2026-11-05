@@ -6,7 +6,7 @@
 
 ### Key Files
 - `ScrollingLoot.lua` - Main addon code (all logic in single file), shared by both games
-- `ScrollingLoot.toc` - Anniversary manifest (interface 20505)
+- `ScrollingLoot.toc` - Anniversary manifest (interface 20506, patch 2.5.6)
 - `ScrollingLoot_Camelot.toc` - Forever manifest (interface 16001, `AllowLoadGameType: camelot`); loads `Compat_Forever.lua` before the shared source
 - `Compat_Forever.lua` - Forever adapter: settings launcher, defaults, self-loot matching, restricted-message guards, asynchronous C_Item lookup and the loot window source
 - `tests/forever.lua` - Standalone Lua adapter/event tests with frame stand-ins; excluded from packages

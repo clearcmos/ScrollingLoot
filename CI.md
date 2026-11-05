@@ -132,7 +132,7 @@ To also upload to WoWInterface and Wago, add more secrets and update the workflo
 ## Game Version Detection
 
 The packager automatically detects game versions from each `.toc` file's `## Interface:` line, and one upload carries all of them:
-- `20505` (`ScrollingLoot.toc`) → TBC Classic / Anniversary Edition
+- `20506` (`ScrollingLoot.toc`, patch 2.5.6) → TBC Classic / Anniversary Edition
 - `16001` (`ScrollingLoot_Camelot.toc`) → WoW Forever
 - `11503` → Classic Era
 - `110002` → Retail
