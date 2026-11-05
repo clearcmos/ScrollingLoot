@@ -539,20 +539,32 @@ local function PlayGlow(frame, msg)
 end
 
 -- Stack a new line clear of the others, then show it
+-- Distance between stacked lines: content height plus margin (more with a background)
+local function StackSpacing()
+    return max(db.iconSize, db.fontSize + 4) + (db.showBackground and 14 or 6);
+end
+
+-- How fast a static line slides into a gap (ease out, about 0.2 s to settle)
+local STATIC_SLIDE_RATE = 14;
+
 local function PlaceNewMessage(frame)
-    -- Spacing based on content height plus margin (extra padding if background shown)
-    local contentHeight = max(db.iconSize, db.fontSize + 4);
-    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
+    local stackSpacing = StackSpacing();
 
     frame.stackOffsetY = 0;
+    -- Static lines keep arrival order: a new one goes below the lowest line,
+    -- and OnUpdate slides each line up into its place as older lines expire
+    if db.staticMode then frame.stackOffsetY = -#activeMessages * stackSpacing; end
     for _, existingFrame in ipairs(activeMessages) do
+        if db.staticMode then
+            frame.stackOffsetY = min(frame.stackOffsetY, existingFrame.stackOffsetY - stackSpacing);
+        end
         local existingY = existingFrame.stackOffsetY;
         if not db.staticMode then
             -- In scroll mode, account for scroll progress
             existingY = existingY + db.scrollDistance * (existingFrame.scrollTime / db.scrollSpeed);
         end
         local overlap = frame.stackOffsetY - existingY;
-        if overlap > -stackSpacing and overlap < stackSpacing then
+        if not db.staticMode and overlap > -stackSpacing and overlap < stackSpacing then
             frame.stackOffsetY = existingY - stackSpacing;
         end
     end
@@ -743,6 +755,7 @@ local function OnUpdate(self, elapsed)
     -- Animate active messages
     if #activeMessages == 0 and not overflowQueue[1] then return; end
 
+    local spacing = db.staticMode and StackSpacing();
     local i = 1;
     while i <= #activeMessages do
         local frame = activeMessages[i];
@@ -753,6 +766,17 @@ local function OnUpdate(self, elapsed)
             tremove(activeMessages, i);
             ReleaseMessageFrame(frame);
         else
+            -- Static mode: slide toward this line's place in arrival order
+            if spacing then
+                local target = -(i - 1) * spacing;
+                local offset = frame.stackOffsetY;
+                if offset ~= target then
+                    offset = offset + (target - offset) * min(1, elapsed * STATIC_SLIDE_RATE);
+                    if math.abs(target - offset) < 0.5 then offset = target; end
+                    frame.stackOffsetY = offset;
+                end
+            end
+
             -- Update position
             local x, y = CalculatePosition(frame);
             frame:ClearAllPoints();

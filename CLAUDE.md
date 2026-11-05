@@ -32,7 +32,7 @@
 - OnUpdate-based animation (no XML AnimationGroups)
 - Custom widget factory functions for sliders, checkboxes, dropdowns
 - Draggable preview area frames for real-time positioning (loot notifications + BoP dialog)
-- Messages store relative `stackOffsetY` (not absolute positions) so they follow when dragging
+- Messages store relative `stackOffsetY` (not absolute positions) so they follow when dragging. In static mode `PlaceNewMessage` puts a new line below the lowest one and `OnUpdate` eases each line toward slot `-(index - 1) * StackSpacing()` (`STATIC_SLIDE_RATE`), so lines keep arrival order and close the gap an expired line leaves (v1.2.2). Scrolling lines keep their spawn offset
 - Hover pause: message frames are motion-enabled and click-disabled (clicks reach the world), sized to icon plus text with 6px hit insets. `MessageFrame_OnEnter` sets `feedPaused`, which stops `OnUpdate` timers and holds alpha at 1; new loot, money and honor messages are queued (`QueueWhilePaused`) so the hovered line never moves or expires. `MessageFrame_OnLeave` resumes after 0.1s unless another line is hovered; static-mode lines restart their fade. Item lines carry `itemLink` for `GameTooltip:SetHyperlink` (`Compat.EmitItem` passes the link on Forever). `ApplyHoverSetting` turns motion off on every frame when the option is off
 - Feed lines (`ShowMessage`): every loot, money and honor message is a table (`kind`, `key`, `amount`, display fields) drawn by `ApplyMessage`. A message whose `key` matches a visible line (`item:<item string>`, `money`, `honor`) adds its amount to that line; static lines then restart their time (scrollTime back to the fade-in end), scrolling lines merge only before `FadeStart()`. Options-window samples and the `testmoney`/`testhonor` messages have no key and never merge; `/sloot test` items have one, so a second run adds to the first. Past `maxMessages`, messages wait in `overflowQueue` (merging there too) and `DrainQueue` shows them at the end of `OnUpdate` as lines expire
 - Fast Loot system: `FastLootFrame` handles `LOOT_OPENED` (hide window) and `LOOT_READY` (auto-loot) events
@@ -92,7 +92,7 @@ Restored on 2026-11-04 (user request: restore what Forever does not already do):
 - Battleground honor still has only the chat source.
 
 Run `luac5.1 -p ScrollingLoot.lua Compat_Forever.lua` and `lua5.1 tests/forever.lua`.
-The 23 tests cover merging repeated pickups, the overflow queue, `testhonor` lines not merging, hover pause (tooltip, held pickups, resume), async item lookup, message ownership, restricted input, Fast
+The 24 tests cover merging repeated pickups, static lines sliding into the gap an expired line leaves, the overflow queue, `testhonor` lines not merging, hover pause (tooltip, held pickups, resume), async item lookup, message ownership, restricted input, Fast
 Loot event order, a corpse opened within the throttle of the previous one, the
 full-bags window rule (kept only when the loot has an item), the
 loot window source and its duplicate suppression (both

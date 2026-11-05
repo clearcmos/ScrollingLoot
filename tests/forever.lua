@@ -511,6 +511,28 @@ test("pickups past the maximum wait for a free line instead of pushing out the o
     advance(100)
 end)
 
+test("in the static feed, lines slide up into the place an expired line leaves", function()
+    assert(ScrollingLootDB.staticMode, "Forever defaults to the static feed")
+    advance(100)                    -- an empty feed
+    chatLoot(123)                   -- Forever lines last 4 s
+    advance(1)
+    chatLoot(2589)
+    advance(1)
+    chatLoot(4306)
+    local first, second, third = linesWith("Sample Item")[1], linesWith("Linen Cloth")[1], linesWith("Silk Cloth")[1]
+    local spacing = second.stackOffsetY - third.stackOffsetY
+    assert(spacing > 0 and first.stackOffsetY == 0, "lines stack downward in arrival order")
+    advance(2.1)                    -- the first line expires
+    assert(not first.shown, "the oldest line is gone")
+    for _ = 1, 20 do advance(0.02) end
+    assert(math.abs(second.stackOffsetY) < 0.01, "the next line slid up into the top place")
+    assert(math.abs(third.stackOffsetY + spacing) < 0.01, "the line after it followed")
+    chatLoot(123)                   -- the same item again, now a new line
+    local newest = linesWith("Sample Item")[1]
+    assert(newest.stackOffsetY < third.stackOffsetY - spacing / 2, "a new line goes below the others, not into the old top place")
+    advance(100)
+end)
+
 test("test messages keep a line each", function()
     local mark = #messages
     SlashCmdList.SCROLLINGLOOT("testhonor")

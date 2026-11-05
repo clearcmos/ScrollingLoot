@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.2
+
+**Changes:**
+
+- **Static Feed Keeps Its Order** - When a line in the static feed expires, the lines below it now slide up to close the gap, and new pickups always appear at the bottom. Before, a new pickup could take the empty place at the top, above older lines. Tried in game on WoW Forever, not on Anniversary.
+
 ## v1.2.1
 
 **Bug Fixes:**

@@ -34,7 +34,7 @@ yet, so the feed may miss loot there. Differences from Anniversary:
 
 ## Features
 
-- **Floating notifications** - Items scroll upward (or fade in place with Static Mode), positionable anywhere on screen
+- **Floating notifications** - Items scroll upward (or fade in place with Static Mode, where the lines below slide up as one expires), positionable anywhere on screen
 - **Item icons** - Each notification includes the item's icon for quick recognition
 - **Quality colors** - Text is colored by item rarity (grey → white → green → blue → purple → orange)
 - **Stack counts** - Shows quantity for multi-item loots (e.g., "Wool Cloth x5")
