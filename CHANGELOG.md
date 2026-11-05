@@ -2,9 +2,11 @@
 
 ## v1.1.0
 
+**Testing note:** None of these changes have been tried on Anniversary in game; they have local tests, and hover to pause was used on WoW Forever. Anniversary was last tested in game during the early phase (Karazhan and Magtheridon's Lair). Please report anything that breaks.
+
 **New Features:**
 
-- **WoW Forever Support (Experimental)** - The same download now loads on WoW Forever through its own TOC, listed as "Scrolling Loot (Forever Experimental)". It defaults to a compact static feed, reads pickups from the loot window as well as chat (Forever can hide loot chat text from addons), uses Forever's own bind-on-pickup prompt, and adds an Options > AddOns entry that opens the options window. Behavior in groups, dungeons and battlegrounds is untested.
+- **WoW Forever Support (Experimental)** - The same download now loads on WoW Forever through its own TOC, listed as "Scrolling Loot (Forever Experimental)". It defaults to a compact static feed, reads pickups from the loot window as well as chat (Forever can hide loot chat text from addons), uses Forever's own bind-on-pickup prompt, and adds an Options > AddOns entry that opens the options window. Tested solo in the open world only: groups, dungeons, raids, battlegrounds and boss fights are untested. In those places Forever can hide loot chat text from addons, and the loot window fallback has not been checked there yet, so the feed may miss loot inside instances.
 
 - **Hover to Pause** - Hovering a notification pauses the feed at full opacity and shows the item's tooltip. Pickups that arrive meanwhile appear once the cursor leaves. Clicks still pass through to the game world. On by default; toggle it under Animation in the options.
 

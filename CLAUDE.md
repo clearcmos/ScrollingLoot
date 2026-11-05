@@ -21,8 +21,8 @@
 - Live preview while configuring (auto-spawns test messages)
 - **Hover to pause** (`hoverTooltips`, on by default): hovering a notification freezes the feed at full opacity and shows the item tooltip
 - **Drag-to-position**: Blue highlighted areas appear over previews; drag to reposition in real-time
-- **Fast Loot mode**: Auto-loot items instantly and completely hide loot window (SHIFT override to show normally)
-- **Enhanced BoP confirmation**: Custom Bind-on-Pickup dialog shows item icon and name (replaces generic popup when Fast Loot enabled)
+- **Fast Loot mode**: Loots every slot on `LOOT_READY` and hides the loot window (SHIFT shows it); the window stays open under master loot or when bags are full and the loot has an item
+- **BoP confirmation (Anniversary only)**: Custom Bind-on-Pickup dialog shows item icon and name (replaces the generic popup when Fast Loot is enabled; Forever keeps the game's prompt)
 - Optional background rectangle behind loot text (disabled by default, hybrid width: min 180px, max 320px)
 - Configurable: icon/font size, scroll speed/distance, fade timing, quality filter, background toggle
 
