@@ -1040,10 +1040,24 @@ local function HasFreeInventorySlot()
     return false;
 end
 
+-- Check if the open loot has an item (money, currency and empty loot need no bag space)
+local LOOT_SLOT_TYPE_ITEM = Enum and Enum.LootSlotType and Enum.LootSlotType.Item or LOOT_SLOT_ITEM or 1;
+local function LootHasItem()
+    for i = 1, GetNumLootItems() do
+        if GetLootSlotType(i) == LOOT_SLOT_TYPE_ITEM then
+            return true;
+        end
+    end
+    return false;
+end
+
 -- Perform fast looting of all items
+-- The 0.3s throttle only guards against repeated LOOT_READY in one loot window.
+-- Retries (skipThrottle) leave it untouched, and LOOT_CLOSED clears it: a stale
+-- throttle made the next corpse's window hide with nothing looted.
 local function DoFastLoot(skipThrottle)
     if skipThrottle or GetTime() - fastLootDelay >= 0.3 then
-        fastLootDelay = GetTime();
+        if not skipThrottle then fastLootDelay = GetTime(); end
         -- Fast Loot is already gated by db.fastLoot check in event handler
         -- No need to check auto-loot CVar - addon setting takes precedence
         local lootMethod = C_PartyInfo and C_PartyInfo.GetLootMethod and C_PartyInfo.GetLootMethod();
@@ -1073,8 +1087,9 @@ end
 -- Handle loot events
 local function FastLoot_OnEvent(self, event, ...)
     if event == "LOOT_CLOSED" then
-        -- Reset state when loot window closes
+        -- Reset state when loot window closes, so the next window loots at once
         usingDefaultLootBehavior = false;
+        fastLootDelay = 0;
         return;
     end
 
@@ -1105,7 +1120,7 @@ local function FastLoot_OnEvent(self, event, ...)
         end
 
         -- Check if inventory is full
-        local inventoryFull = not HasFreeInventorySlot();
+        local inventoryFull = LootHasItem() and not HasFreeInventorySlot();
 
         -- If master loot items or inventory full, show loot window normally
         if hasMasterLootItems or inventoryFull then
