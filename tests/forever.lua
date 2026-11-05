@@ -36,6 +36,10 @@ local function advance(seconds)
         if timers[i].at <= now then due[#due + 1] = table.remove(timers, i) end
     end
     for i = #due, 1, -1 do due[i].run() end
+    -- Feed lines age with the clock once the main file is loaded
+    if ScrollingLootFrame and ScrollingLootFrame.scripts.OnUpdate then
+        ScrollingLootFrame.scripts.OnUpdate(ScrollingLootFrame, seconds)
+    end
 end
 
 local lockdown = false
@@ -113,6 +117,7 @@ SlashCmdList = {}
 UISpecialFrames = {}
 IsShiftKeyDown = function() return false end
 PlaySound = function() end
+UnitFactionGroup = function() return "Alliance" end
 -- The game's settings panel: the AddOns entry is a canvas with one button
 local launcherPanel, launcherCategory
 Settings = {
@@ -384,7 +389,7 @@ test("looted money shows once, from chat or from the money change", function()
     advance(2)
     local shown = shownSince(mark)
     local _, count = shown:gsub("1s 50c", "")
-    assert(count == 1, "money must show exactly once: " .. shown)
+    assert(count == 1 and not shown:find("3s", 1, true), "money must show exactly once: " .. shown)
     fire("LOOT_CLOSED")
     advance(10)
     -- hidden chat: the money change alone shows it
@@ -462,6 +467,56 @@ test("hovering a notification pauses the feed, shows its tooltip and holds new p
     ScrollingLootFrame.scripts.OnUpdate(ScrollingLootFrame, 100)
     assert(not line.shown, "feed runs again")
     advance(10)
+end)
+
+-- The visible feed lines whose text contains a string
+local function linesWith(text)
+    local found = {}
+    for _, value in ipairs(objects) do
+        if value.shown and value.scripts.OnEnter and value.text and value.text.textValue
+            and value.text.textValue:find(text, 1, true) then found[#found + 1] = value end
+    end
+    return found
+end
+
+test("a repeated pickup adds to its line on screen and keeps the line up", function()
+    cached = true
+    advance(100)                    -- an empty feed
+    chatLoot(2589)
+    advance(3)                      -- Forever lines last 4 s
+    chatLoot(2589, 2)
+    local lines = linesWith("Linen Cloth")
+    assert(#lines == 1 and lines[1].text.textValue == "Linen Cloth x3", "one line, counted up")
+    advance(3)                      -- 6 s after the first pickup, 3 s after the second
+    assert(lines[1].shown, "the second pickup restarted the line's time")
+    chatLoot(4306)
+    assert(#linesWith("Silk Cloth") == 1 and #linesWith("Linen Cloth") == 1, "another item gets its own line")
+    advance(100)
+end)
+
+test("pickups past the maximum wait for a free line instead of pushing out the oldest", function()
+    local saved = ScrollingLootDB.maxMessages
+    ScrollingLootDB.maxMessages = 2
+    chatLoot(123)
+    chatLoot(2589)
+    chatLoot(4306)
+    chatLoot(4306, 2)
+    assert(#linesWith("Sample Item") == 1, "the oldest line stays")
+    assert(#linesWith("Silk Cloth") == 0, "the third item waits")
+    advance(100)                    -- both lines expire and the queued one takes a place
+    local lines = linesWith("Silk Cloth")
+    assert(#lines == 1 and lines[1].text.textValue == "Silk Cloth x3", "queued pickups merge while they wait")
+    ScrollingLootDB.maxMessages = saved
+    advance(100)
+end)
+
+test("test messages keep a line each", function()
+    local mark = #messages
+    SlashCmdList.SCROLLINGLOOT("testhonor")
+    local shown = shownSince(mark)
+    assert(shown:find("+15 Honor", 1, true) and shown:find("+50 Honor", 1, true)
+        and shown:find("+100 Honor", 1, true), shown)
+    advance(100)
 end)
 
 test("Anniversary retains its defaults, Fast Loot events and custom bind dialog", function()

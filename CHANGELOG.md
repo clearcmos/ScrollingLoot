@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+**New Features:**
+
+- **Repeats Add Up** - Looting the same item again while its line is on screen adds to that line ("Linen Cloth x3") instead of opening a new one. Gold and honor add up the same way. In static mode the line also stays up for its full duration again; a scrolling line takes more only until it starts to fade.
+- **No Lost Lines** - When the feed holds its maximum number of lines, new pickups wait and appear as older lines expire, instead of pushing the oldest line out. Waiting pickups of the same item add up too.
+
 ## v1.1.0
 
 **Testing note:** None of these changes have been tried on Anniversary in game; they have local tests, and hover to pause was used on WoW Forever. Anniversary was last tested in game during the early phase (Karazhan and Magtheridon's Lair). Please report anything that breaks.

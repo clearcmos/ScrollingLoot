@@ -39,6 +39,8 @@ yet, so the feed may miss loot there. Differences from Anniversary:
 - **Item icons** - Each notification includes the item's icon for quick recognition
 - **Quality colors** - Text is colored by item rarity (grey → white → green → blue → purple → orange)
 - **Stack counts** - Shows quantity for multi-item loots (e.g., "Wool Cloth x5")
+- **Repeats add up** - Looting the same item again while its line is on screen adds to that line instead of opening a new one; gold and honor add up the same way
+- **No lost lines** - When the feed is full, new pickups wait and appear as older lines expire, instead of pushing the oldest line out
 - **Money notifications** - Gold, silver, and copper pickups display with appropriate coin icons
 - **Honor notifications** - Honor point gains display with faction-appropriate PvP icons (Horde/Alliance) and customizable text color
 - **Fast Loot mode** - Takes every item at once and hides the loot window (hold SHIFT to show it). The window still opens when your bags are full and there is an item to take, or when items are left for the master looter

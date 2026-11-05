@@ -107,6 +107,11 @@ local feedPaused = false;
 local hoveredMessage = nil;
 local pausedQueue = {};
 
+-- When a line starts to fade (on Forever, always before the line expires)
+local function FadeStart()
+    return Compat.isForever and min(db.fadeStartTime, db.scrollSpeed - 0.1) or db.fadeStartTime;
+end
+
 local function QueueWhilePaused(fn, ...)
     local entry = { ... };
     entry.fn = fn;
@@ -119,7 +124,7 @@ local function ResumeFeed()
     feedPaused = false;
     -- Static lines restart their fade instead of dropping back to a faded alpha
     if db.staticMode then
-        local fadeStart = Compat.isForever and min(db.fadeStartTime, db.scrollSpeed - 0.1) or db.fadeStartTime;
+        local fadeStart = FadeStart();
         for _, frame in ipairs(activeMessages) do
             frame.scrollTime = min(frame.scrollTime, fadeStart);
         end
@@ -239,6 +244,7 @@ local function ReleaseMessageFrame(frame)
     frame.contentWidth = nil;
     frame.isPreview = false;
     frame.itemLink = nil;
+    frame.msg = nil;
     if hoveredMessage == frame then
         hoveredMessage = nil;
         if GameTooltip:IsOwned(frame) then GameTooltip:Hide(); end
@@ -318,141 +324,6 @@ local function CalculatePosition(frame)
     end
 
     return baseX, baseY;
-end
-
--- Add a loot message to display (internal, skips enabled check for preview)
-local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, isPreview, itemLink)
-    if not isPreview and not db.enabled then return; end
-    if not isPreview and itemQuality < db.minQuality then return; end
-    if feedPaused then
-        QueueWhilePaused(AddLootMessageInternal, itemName, itemIcon, itemQuality, quantity, isPreview, itemLink);
-        return;
-    end
-
-    -- Limit active messages
-    while #activeMessages >= db.maxMessages do
-        local oldFrame = tremove(activeMessages, 1);
-        ReleaseMessageFrame(oldFrame);
-    end
-
-    local frame = AcquireMessageFrame();
-    frame.isPreview = isPreview;
-    frame.itemLink = itemLink;
-
-    -- Set icon
-    frame.icon:SetTexture(itemIcon);
-    frame.icon:SetSize(db.iconSize, db.iconSize);
-
-    -- Calculate text gap (extra indent when glow is enabled)
-    local textGap = 4;
-    if db.glowEnabled and itemQuality >= db.glowMinQuality then
-        textGap = 12; -- Extra space for glow
-    end
-
-    -- Set text with quality color
-    local r, g, b = GetQualityColor(itemQuality);
-    local displayText = itemName;
-    if db.showQuantity and quantity and quantity > 1 then
-        displayText = format("%s x%d", itemName, quantity);
-    end
-    frame.text:SetText(displayText);
-    frame.text:SetTextColor(r, g, b);
-    frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
-    frame.text:ClearAllPoints();
-    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
-
-    -- Calculate and store content width (for center alignment)
-    local textWidth = frame.text:GetStringWidth();
-    frame.contentWidth = db.iconSize + textGap + textWidth;
-    -- Hover area matches the icon and text
-    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
-
-    -- Configure background (hybrid: actual width with min/max bounds)
-    if db.showBackground then
-        local contentWidth = frame.contentWidth + 8; -- Extra 8px to ensure text is fully covered
-        local contentHeight = max(db.iconSize, db.fontSize + 4);
-        local padding = 6;
-
-        -- For center alignment, fit to content; for left/right alignment, use minimum width
-        local bgWidth;
-        if db.textAlign == "center" then
-            bgWidth = contentWidth + (padding * 2);
-        else
-            local minWidth = 180;
-            bgWidth = max(minWidth, contentWidth + (padding * 2));
-        end
-
-        frame.background:ClearAllPoints();
-        if db.textAlign == "center" then
-            -- Center background around the content
-            local contentCenter = frame.contentWidth / 2;
-            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
-        elseif db.textAlign == "right" then
-            -- Right-align background to extend leftward from content
-            frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
-        else
-            -- Left-align (default)
-            frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
-        end
-        frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
-        frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
-        frame.background:Show();
-    else
-        frame.background:Hide();
-    end
-
-    -- Calculate stack offset to avoid overlap with existing messages
-    -- Spacing based on content height plus margin (extra padding if background shown)
-    local contentHeight = max(db.iconSize, db.fontSize + 4);
-    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
-
-    frame.stackOffsetY = 0;
-    for _, existingFrame in ipairs(activeMessages) do
-        -- Check if this message would overlap with existing one
-        local existingY;
-        if db.staticMode then
-            -- In static mode, no scroll offset - just use stack offset
-            existingY = existingFrame.stackOffsetY;
-        else
-            -- In scroll mode, account for scroll progress
-            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
-            local existingScrollOffset = db.scrollDistance * existingProgress;
-            existingY = existingFrame.stackOffsetY + existingScrollOffset;
-        end
-
-        local overlap = frame.stackOffsetY - existingY;
-        if overlap > -stackSpacing and overlap < stackSpacing then
-            frame.stackOffsetY = existingY - stackSpacing;
-        end
-    end
-
-    -- Position and show
-    frame.scrollTime = 0;
-    local x, y = CalculatePosition(frame);
-    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
-    -- Static mode: start at 0 alpha for fade-in effect
-    if db.staticMode then
-        frame:SetAlpha(0);
-    else
-        frame:SetAlpha(1);
-    end
-    frame:Show();
-
-    -- Trigger glow effect if enabled and quality meets threshold
-    if db.glowEnabled and itemQuality >= db.glowMinQuality then
-        local glowSize = db.iconSize * 2.5; -- Chunky glow around icon
-        frame.glow:SetSize(glowSize, glowSize);
-        frame.glowAnimGroup:Stop();
-        frame.glow:SetAlpha(0);
-        frame.glowAnimGroup:Play();
-    end
-
-    tinsert(activeMessages, frame);
-end
-
--- Add a loot message to display (public API)
-local function AddLootMessage(itemName, itemIcon, itemQuality, quantity, itemLink)
-    AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, false, itemLink);
 end
 
 -- Parse item link to extract info
@@ -585,71 +456,67 @@ local function FormatMoneyText(copper)
     return table.concat(parts, " ");
 end
 
--- Add a money notification
-local function AddMoneyMessage(copperAmount, isPreview)
-    if not isPreview and not db.enabled then return; end
-    if not isPreview and not db.showMoney then return; end
-    if copperAmount <= 0 then return; end
-    if feedPaused then
-        QueueWhilePaused(AddMoneyMessage, copperAmount, isPreview);
-        return;
-    end
+--------------------------------------------------------------------------------
+-- Feed lines: merging repeated pickups and queueing past the maximum
+--------------------------------------------------------------------------------
 
-    -- Limit active messages
-    while #activeMessages >= db.maxMessages do
-        local oldFrame = tremove(activeMessages, 1);
-        ReleaseMessageFrame(oldFrame);
-    end
+-- A pickup of something already on screen adds to that line instead of opening
+-- a new one: items by their item string, money and honor each in one line.
+-- Previews and test messages never merge. Messages beyond the maximum number of
+-- lines wait in overflowQueue, merging while they wait, and appear as lines expire.
+local overflowQueue = {};
 
-    local frame = AcquireMessageFrame();
-    frame.isPreview = isPreview;
+-- Fade-in duration for static mode (seconds)
+local STATIC_FADE_IN_DURATION = 0.3;
 
-    -- Set icon based on denomination
-    frame.icon:SetTexture(GetMoneyIcon(copperAmount));
-    frame.icon:SetSize(db.iconSize, db.iconSize);
-
-    -- Calculate text gap
+-- Draw a line's icon, text, size and background from its message
+local function ApplyMessage(frame, msg)
+    local icon, text = msg.icon, msg.name;
+    local r, g, b;
     local textGap = 4;
+    if msg.kind == "money" then
+        icon, text = GetMoneyIcon(msg.amount), FormatMoneyText(msg.amount);
+        r, g, b = MONEY_COLOR.r, MONEY_COLOR.g, MONEY_COLOR.b;
+    elseif msg.kind == "honor" then
+        icon, text = GetHonorIcon(), "+" .. msg.amount .. " Honor";
+        r, g, b = db.honorColor.r, db.honorColor.g, db.honorColor.b;
+    else
+        r, g, b = GetQualityColor(msg.quality);
+        if db.showQuantity and msg.amount > 1 then
+            text = format("%s x%d", msg.name, msg.amount);
+        end
+        if db.glowEnabled and msg.quality >= db.glowMinQuality then
+            textGap = 12; -- Extra space for glow
+        end
+    end
 
-    -- Set text with money color
-    local displayText = FormatMoneyText(copperAmount);
-    frame.text:SetText(displayText);
-    frame.text:SetTextColor(MONEY_COLOR.r, MONEY_COLOR.g, MONEY_COLOR.b);
+    frame.icon:SetTexture(icon);
+    frame.icon:SetSize(db.iconSize, db.iconSize);
+    frame.text:SetText(text);
+    frame.text:SetTextColor(r, g, b);
     frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
     frame.text:ClearAllPoints();
     frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
 
-    -- Calculate and store content width (for center alignment)
-    local textWidth = frame.text:GetStringWidth();
-    frame.contentWidth = db.iconSize + textGap + textWidth;
-    -- Hover area matches the icon and text
-    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
+    -- Content width (for alignment); the hover area matches the icon and text
+    frame.contentWidth = db.iconSize + textGap + frame.text:GetStringWidth();
+    local contentHeight = max(db.iconSize, db.fontSize + 4);
+    frame:SetSize(frame.contentWidth, contentHeight);
 
-    -- Configure background
+    -- Background (hybrid: actual width, with a minimum unless centered)
     if db.showBackground then
-        local contentWidth = frame.contentWidth + 8;
-        local contentHeight = max(db.iconSize, db.fontSize + 4);
         local padding = 6;
-
-        -- For center alignment, fit to content; for left/right alignment, use minimum width
-        local bgWidth;
-        if db.textAlign == "center" then
-            bgWidth = contentWidth + (padding * 2);
-        else
-            local minWidth = 180;
-            bgWidth = max(minWidth, contentWidth + (padding * 2));
+        local bgWidth = frame.contentWidth + 8 + (padding * 2); -- Extra 8px so the text is fully covered
+        if db.textAlign ~= "center" then
+            bgWidth = max(180, bgWidth);
         end
-
         frame.background:ClearAllPoints();
         if db.textAlign == "center" then
-            -- Center background around the content
-            local contentCenter = frame.contentWidth / 2;
-            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
+            frame.background:SetPoint("CENTER", frame, "LEFT", frame.contentWidth / 2, 0);
         elseif db.textAlign == "right" then
-            -- Right-align background to extend leftward from content
+            -- Extends leftward from the content
             frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
         else
-            -- Left-align (default)
             frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
         end
         frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
@@ -658,40 +525,123 @@ local function AddMoneyMessage(copperAmount, isPreview)
     else
         frame.background:Hide();
     end
+end
 
-    -- Calculate stack offset
+-- Glow around an item's icon, when enabled for its quality
+local function PlayGlow(frame, msg)
+    if msg.kind ~= "item" or not db.glowEnabled or msg.quality < db.glowMinQuality then return; end
+    local glowSize = db.iconSize * 2.5; -- Chunky glow around icon
+    frame.glow:SetSize(glowSize, glowSize);
+    frame.glowAnimGroup:Stop();
+    frame.glow:SetAlpha(0);
+    frame.glowAnimGroup:Play();
+end
+
+-- Stack a new line clear of the others, then show it
+local function PlaceNewMessage(frame)
+    -- Spacing based on content height plus margin (extra padding if background shown)
     local contentHeight = max(db.iconSize, db.fontSize + 4);
     local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
 
     frame.stackOffsetY = 0;
     for _, existingFrame in ipairs(activeMessages) do
-        local existingY;
-        if db.staticMode then
-            existingY = existingFrame.stackOffsetY;
-        else
-            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
-            local existingScrollOffset = db.scrollDistance * existingProgress;
-            existingY = existingFrame.stackOffsetY + existingScrollOffset;
+        local existingY = existingFrame.stackOffsetY;
+        if not db.staticMode then
+            -- In scroll mode, account for scroll progress
+            existingY = existingY + db.scrollDistance * (existingFrame.scrollTime / db.scrollSpeed);
         end
-
         local overlap = frame.stackOffsetY - existingY;
         if overlap > -stackSpacing and overlap < stackSpacing then
             frame.stackOffsetY = existingY - stackSpacing;
         end
     end
 
-    -- Position and show
     frame.scrollTime = 0;
     local x, y = CalculatePosition(frame);
     frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
-    if db.staticMode then
-        frame:SetAlpha(0);
-    else
-        frame:SetAlpha(1);
-    end
+    -- Static mode: start at 0 alpha for fade-in effect
+    frame:SetAlpha(db.staticMode and 0 or 1);
     frame:Show();
-
     tinsert(activeMessages, frame);
+end
+
+-- Show a message: merge it into a matching line or queued message, queue it
+-- while the feed is full, or give it a new line
+local function ShowMessage(msg)
+    if feedPaused then
+        QueueWhilePaused(ShowMessage, msg);
+        return;
+    end
+
+    if msg.key then
+        for _, frame in ipairs(activeMessages) do
+            local line = frame.msg;
+            -- A scrolling line takes more only until it starts to fade; a static one always
+            if line and line.key == msg.key and (db.staticMode or frame.scrollTime < FadeStart()) then
+                line.amount = line.amount + msg.amount;
+                if msg.itemLink then frame.itemLink = msg.itemLink; end
+                ApplyMessage(frame, line);
+                -- Static lines restart their time on screen without fading in again
+                if db.staticMode then
+                    frame.scrollTime = min(frame.scrollTime, STATIC_FADE_IN_DURATION);
+                end
+                PlayGlow(frame, line);
+                return;
+            end
+        end
+        for _, queued in ipairs(overflowQueue) do
+            if queued.key == msg.key then
+                queued.amount = queued.amount + msg.amount;
+                return;
+            end
+        end
+    end
+
+    if #activeMessages >= db.maxMessages then
+        tinsert(overflowQueue, msg);
+        return;
+    end
+
+    local frame = AcquireMessageFrame();
+    frame.isPreview = msg.isPreview;
+    frame.itemLink = msg.itemLink;
+    frame.msg = msg;
+    ApplyMessage(frame, msg);
+    PlaceNewMessage(frame);
+    PlayGlow(frame, msg);
+end
+
+-- Bring queued messages on screen while there is room
+local function DrainQueue()
+    while overflowQueue[1] and #activeMessages < db.maxMessages and not feedPaused do
+        ShowMessage(tremove(overflowQueue, 1));
+    end
+end
+
+-- Add a loot message to display (internal, skips enabled check for preview)
+local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, isPreview, itemLink)
+    if not isPreview and not db.enabled then return; end
+    if not isPreview and itemQuality < db.minQuality then return; end
+    local key;
+    if not isPreview then
+        key = "item:" .. ((itemLink and strmatch(itemLink, "|H(item:[^|]+)|h")) or itemName);
+    end
+    ShowMessage({ kind = "item", key = key, amount = quantity or 1, name = itemName, icon = itemIcon,
+        quality = itemQuality, itemLink = itemLink, isPreview = isPreview });
+end
+
+-- Add a loot message to display (public API)
+local function AddLootMessage(itemName, itemIcon, itemQuality, quantity, itemLink)
+    AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity, false, itemLink);
+end
+
+-- Add a money notification
+local function AddMoneyMessage(copperAmount, isPreview)
+    if not isPreview and not db.enabled then return; end
+    if not isPreview and not db.showMoney then return; end
+    if copperAmount <= 0 then return; end
+    ShowMessage({ kind = "money", key = (not isPreview) and "money" or nil, amount = copperAmount,
+        isPreview = isPreview });
 end
 
 -- Add an honor notification
@@ -699,106 +649,8 @@ local function AddHonorMessage(honorAmount, isPreview)
     if not isPreview and not db.enabled then return; end
     if not isPreview and not db.showHonor then return; end
     if honorAmount <= 0 then return; end
-    if feedPaused then
-        QueueWhilePaused(AddHonorMessage, honorAmount, isPreview);
-        return;
-    end
-
-    -- Limit active messages
-    while #activeMessages >= db.maxMessages do
-        local oldFrame = tremove(activeMessages, 1);
-        ReleaseMessageFrame(oldFrame);
-    end
-
-    local frame = AcquireMessageFrame();
-    frame.isPreview = isPreview;
-
-    -- Set faction-appropriate honor icon (proper square icons, same size as items)
-    frame.icon:SetTexture(GetHonorIcon());
-    frame.icon:SetSize(db.iconSize, db.iconSize);
-
-    -- Position text after icon (same as items)
-    local textGap = 4;
-    local displayText = "+" .. honorAmount .. " Honor";
-    frame.text:SetText(displayText);
-    frame.text:SetTextColor(db.honorColor.r, db.honorColor.g, db.honorColor.b);
-    frame.text:SetFont(frame.text:GetFont(), db.fontSize, "OUTLINE");
-    frame.text:ClearAllPoints();
-    frame.text:SetPoint("LEFT", frame.icon, "RIGHT", textGap, 0);
-
-    -- Calculate and store content width (for center alignment)
-    local textWidth = frame.text:GetStringWidth();
-    frame.contentWidth = db.iconSize + textGap + textWidth;
-    -- Hover area matches the icon and text
-    frame:SetSize(frame.contentWidth, max(db.iconSize, db.fontSize + 4));
-
-    -- Configure background (same as items)
-    if db.showBackground then
-        local contentWidth = frame.contentWidth + 8;
-        local contentHeight = max(db.iconSize, db.fontSize + 4);
-        local padding = 6;
-
-        -- For center alignment, fit to content; for left/right alignment, use minimum width
-        local bgWidth;
-        if db.textAlign == "center" then
-            bgWidth = contentWidth + (padding * 2);
-        else
-            local minWidth = 180;
-            bgWidth = max(minWidth, contentWidth + (padding * 2));
-        end
-
-        frame.background:ClearAllPoints();
-        if db.textAlign == "center" then
-            -- Center background around the content
-            local contentCenter = frame.contentWidth / 2;
-            frame.background:SetPoint("CENTER", frame, "LEFT", contentCenter, 0);
-        elseif db.textAlign == "right" then
-            -- Right-align background to extend leftward from content
-            frame.background:SetPoint("RIGHT", frame, "LEFT", frame.contentWidth + padding, 0);
-        else
-            -- Left-align (default)
-            frame.background:SetPoint("LEFT", frame, "LEFT", -padding, 0);
-        end
-        frame.background:SetSize(bgWidth, contentHeight + (padding * 2));
-        frame.background:SetColorTexture(0, 0, 0, db.backgroundOpacity);
-        frame.background:Show();
-    else
-        frame.background:Hide();
-    end
-
-    -- Calculate stack offset (same as items)
-    local contentHeight = max(db.iconSize, db.fontSize + 4);
-    local stackSpacing = contentHeight + (db.showBackground and 14 or 6);
-
-    frame.stackOffsetY = 0;
-    for _, existingFrame in ipairs(activeMessages) do
-        local existingY;
-        if db.staticMode then
-            existingY = existingFrame.stackOffsetY;
-        else
-            local existingProgress = existingFrame.scrollTime / db.scrollSpeed;
-            local existingScrollOffset = db.scrollDistance * existingProgress;
-            existingY = existingFrame.stackOffsetY + existingScrollOffset;
-        end
-
-        local overlap = frame.stackOffsetY - existingY;
-        if overlap > -stackSpacing and overlap < stackSpacing then
-            frame.stackOffsetY = existingY - stackSpacing;
-        end
-    end
-
-    -- Position and show
-    frame.scrollTime = 0;
-    local x, y = CalculatePosition(frame);
-    frame:SetPoint("LEFT", UIParent, "BOTTOMLEFT", x, y);
-    if db.staticMode then
-        frame:SetAlpha(0);
-    else
-        frame:SetAlpha(1);
-    end
-    frame:Show();
-
-    tinsert(activeMessages, frame);
+    ShowMessage({ kind = "honor", key = (not isPreview) and "honor" or nil, amount = honorAmount,
+        isPreview = isPreview });
 end
 
 -- Parse honor amount from chat message
@@ -868,9 +720,6 @@ local function AddPreviewMessage()
     AddLootMessageInternal(names[idx], icons[idx], quality, 1, true);
 end
 
--- Fade-in duration for static mode (seconds)
-local STATIC_FADE_IN_DURATION = 0.3;
-
 -- OnUpdate handler for animation
 local function OnUpdate(self, elapsed)
     -- Hover pause: hold every line in place at full opacity
@@ -891,7 +740,7 @@ local function OnUpdate(self, elapsed)
     end
 
     -- Animate active messages
-    if #activeMessages == 0 then return; end
+    if #activeMessages == 0 and not overflowQueue[1] then return; end
 
     local i = 1;
     while i <= #activeMessages do
@@ -917,7 +766,7 @@ local function OnUpdate(self, elapsed)
             end
 
             -- Fade out near end (applies to both modes)
-            local fadeStart = Compat.isForever and min(db.fadeStartTime, db.scrollSpeed - 0.1) or db.fadeStartTime;
+            local fadeStart = FadeStart();
             if frame.scrollTime >= fadeStart then
                 local fadeProgress = (frame.scrollTime - fadeStart) /
                                     (db.scrollSpeed - fadeStart);
@@ -929,6 +778,9 @@ local function OnUpdate(self, elapsed)
             i = i + 1;
         end
     end
+
+    -- Queued messages take the places of expired lines
+    if overflowQueue[1] then DrainQueue(); end
 end
 
 -- Start live preview
@@ -941,7 +793,10 @@ end
 local function StopLivePreview()
     livePreviewActive = false;
     livePreviewTimer = 0;
-    -- Clear any preview messages
+    -- Clear any preview messages, queued ones included
+    for i = #overflowQueue, 1, -1 do
+        if overflowQueue[i].isPreview then tremove(overflowQueue, i); end
+    end
     local i = 1;
     while i <= #activeMessages do
         if activeMessages[i].isPreview then
