@@ -79,7 +79,7 @@ ignore:
 
 ## How to Release
 
-1. **Update your version** in `ScrollingLoot.toc`:
+1. **Update your version** in `ScrollingLoot.toc` and `ScrollingLoot_Camelot.toc`:
    ```
    ## Version: 1.0.3
    ```
@@ -131,8 +131,9 @@ To also upload to WoWInterface and Wago, add more secrets and update the workflo
 
 ## Game Version Detection
 
-The packager automatically detects game versions from your `.toc` file's `## Interface:` line:
-- `20505` → TBC Classic / Anniversary Edition
+The packager automatically detects game versions from each `.toc` file's `## Interface:` line, and one upload carries all of them:
+- `20505` (`ScrollingLoot.toc`) → TBC Classic / Anniversary Edition
+- `16001` (`ScrollingLoot_Camelot.toc`) → WoW Forever
 - `11503` → Classic Era
 - `110002` → Retail
 

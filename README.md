@@ -2,7 +2,24 @@
 
 **ScrollingLoot** displays your looted items as elegant scrolling text with icons. No more squinting at chat logs to see what you picked up when you have fast loot enabled!
 
-Built specifically for **TBC Classic Anniversary**.
+Built for **TBC Classic Anniversary**, with experimental **WoW Forever** support.
+
+### WoW Forever (experimental)
+
+The same download loads on WoW Forever, where it is listed as "Scrolling Loot
+(Forever Experimental)". It has been tested solo; behavior in groups, dungeons
+and battlegrounds is untested. Differences from Anniversary:
+
+- Defaults to a compact, static feed with smaller icons and text and a dark
+  background. Every setting can still be changed.
+- Pickups are also read from the loot window, so they still appear where the
+  game hides loot chat text from addons. Each pickup is shown once.
+- Fast Loot (off by default) uses Forever's own bind-on-pickup prompt instead of
+  the custom dialog.
+- The options window is the same as on Anniversary. The game's Options > AddOns >
+  Scrolling Loot (Experimental) entry has a button that opens it.
+- Forever's own loot toasts are unchanged. If they overlap with the feed, turn off
+  the game's Show Item Toasts setting.
 
 ![Options - Drag Frame](https://github.com/clearcmos/ScrollingLoot/blob/main/assets/image1.png?raw=true)
 

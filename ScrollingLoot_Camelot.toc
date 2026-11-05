@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Scrolling Loot (Forever Experimental)
+## Notes: Experimental compact pickup feed for WoW Forever
+## Author: clearcmos
+## Version: 1.1.0
+## SavedVariables: ScrollingLootDB
+## AllowLoadGameType: camelot
+
+Compat_Forever.lua
+ScrollingLoot.lua

@@ -1,7 +1,8 @@
 -- ScrollingLoot: Displays looted items as scrolling text with icons
--- For WoW Classic Anniversary Edition (2.5.5)
+-- Anniversary with an optional experimental Forever compatibility file
 
 local addonName, addon = ...
+local Compat = addon.Compat or {};
 
 -- Configuration defaults
 local DEFAULT_SETTINGS = {
@@ -29,6 +30,8 @@ local DEFAULT_SETTINGS = {
     honorColor = { r = 0.8, g = 0.2, b = 1.0 },  -- Honor text color (default purple)
     textAlign = "left",         -- Text alignment: "left", "center", or "right"
 };
+
+if Compat.ConfigureDefaults then Compat.ConfigureDefaults(DEFAULT_SETTINGS); end
 
 -- Local references for performance
 local CreateFrame = CreateFrame;
@@ -817,9 +820,10 @@ local function OnUpdate(self, elapsed)
             end
 
             -- Fade out near end (applies to both modes)
-            if frame.scrollTime >= db.fadeStartTime then
-                local fadeProgress = (frame.scrollTime - db.fadeStartTime) /
-                                    (db.scrollSpeed - db.fadeStartTime);
+            local fadeStart = Compat.isForever and min(db.fadeStartTime, db.scrollSpeed - 0.1) or db.fadeStartTime;
+            if frame.scrollTime >= fadeStart then
+                local fadeProgress = (frame.scrollTime - fadeStart) /
+                                    (db.scrollSpeed - fadeStart);
                 alpha = alpha * (1 - fadeProgress);
             end
 
@@ -1085,6 +1089,8 @@ local function DoFastLoot(skipThrottle)
 end
 
 -- Handle loot events
+-- Forever uses this unchanged: its loot window also ends the loot session when
+-- hidden, and LOOT_READY (looting) still comes before LOOT_OPENED (hiding).
 local function FastLoot_OnEvent(self, event, ...)
     if event == "LOOT_CLOSED" then
         -- Reset state when loot window closes, so the next window loots at once
@@ -1441,6 +1447,7 @@ end
 local originalLootBindOnShow = nil;
 
 local function SetupBoPHook()
+    if Compat.nativeBindConfirm then return; end
     if not StaticPopupDialogs or not StaticPopupDialogs["LOOT_BIND"] then
         return;
     end
@@ -2063,14 +2070,19 @@ local function CreateOptionsFrame()
     fastLootCheckbox:SetValue(db.fastLoot);
     fastLootCheckbox.OnValueChanged = function(self, value)
         db.fastLoot = value;
-        -- Show/hide BoP preview based on Fast Loot state
+        -- Show/hide BoP preview based on Fast Loot state (Forever uses the game's prompt)
+        if Compat.nativeBindConfirm then return; end
         if value then
             ShowBoPPreviewArea();
         else
             HideBoPPreviewArea();
         end
     end;
-    fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nBind-on-Pickup confirmations show item icon and name.\nHold SHIFT while looting to show the window normally.";
+    if Compat.nativeBindConfirm then
+        fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nHold SHIFT while looting to show the window normally.";
+    else
+        fastLootCheckbox.checkbox.tooltipText = "Auto-loot items instantly and hide the loot window.\nBind-on-Pickup confirmations show item icon and name.\nHold SHIFT while looting to show the window normally.";
+    end
     fastLootCheckbox.checkbox:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
         GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
@@ -2394,8 +2406,8 @@ local function CreateOptionsFrame()
         StartLivePreview();
         ShowPreviewArea();
         previewInfoFrame:Show();
-        -- Only show BoP preview if Fast Loot is enabled
-        if db.fastLoot then
+        -- Only show BoP preview if Fast Loot is enabled and the custom dialog is used
+        if db.fastLoot and not Compat.nativeBindConfirm then
             ShowBoPPreviewArea();
         end
     end);
@@ -2427,28 +2439,50 @@ local function ToggleOptionsFrame()
     end
 end
 
+-- Open options frame (from the game's AddOns settings entry)
+local function ShowOptionsFrame()
+    if not OptionsFrame then
+        CreateOptionsFrame();
+    end
+    OptionsFrame:Show();
+end
+
 --------------------------------------------------------------------------------
 -- Event Handling
 --------------------------------------------------------------------------------
 
 -- Event handler
 local function OnEvent(self, event, ...)
+    if Compat.Accessible and (event == "CHAT_MSG_LOOT" or event == "CHAT_MSG_MONEY"
+        or event == "CHAT_MSG_COMBAT_HONOR_GAIN") then
+        local message = ...;
+        if not Compat.Accessible(message) then return; end
+    end
     if event == "CHAT_MSG_LOOT" then
         local message = ...;
 
         -- Only show items that enter YOUR inventory
         -- Uses localized LOOT_ITEM_SELF pattern (e.g., "You receive loot: %s" in English)
         -- This filters out: other players looting, items being rolled on, etc.
-        if not strmatch(message, LOOT_SELF_PATTERN) then
+        if Compat.IsOwnLoot then
+            if not Compat.IsOwnLoot(message) then return; end
+        elseif not strmatch(message, LOOT_SELF_PATTERN) then
             return;
         end
 
         local itemLink, quantity = ParseLootMessage(message);
         if not itemLink then return; end
 
-        local itemName, itemIcon, itemQuality = ParseItemLink(itemLink);
-        if itemName and itemIcon then
-            AddLootMessage(itemName, itemIcon, itemQuality or 1, quantity);
+        -- Forever: skip pickups the loot window source already showed
+        if Compat.ConsumeChatLoot and Compat.ConsumeChatLoot(itemLink) then return; end
+
+        if Compat.EmitItem then
+            Compat.EmitItem(itemLink, quantity, AddLootMessage);
+        else
+            local itemName, itemIcon, itemQuality = ParseItemLink(itemLink);
+            if itemName and itemIcon then
+                AddLootMessage(itemName, itemIcon, itemQuality or 1, quantity);
+            end
         end
 
     elseif event == "CHAT_MSG_MONEY" then
@@ -2456,7 +2490,8 @@ local function OnEvent(self, event, ...)
         if db.showMoney then
             local message = ...;
             local moneyAmount = ParseMoneyFromText(message);
-            if moneyAmount and moneyAmount > 0 then
+            if moneyAmount and moneyAmount > 0
+                and not (Compat.ConsumeChatMoney and Compat.ConsumeChatMoney(moneyAmount)) then
                 AddMoneyMessage(moneyAmount, false);
             end
         end
@@ -2529,6 +2564,16 @@ local function OnEvent(self, event, ...)
     elseif event == "PLAYER_LOGIN" then
         -- Setup BoP confirmation hook
         SetupBoPHook();
+        -- Forever: also read pickups from the loot window, in case chat text is hidden
+        if Compat.StartLootWindowSource then
+            Compat.StartLootWindowSource(AddLootMessage, function(amount)
+                AddMoneyMessage(amount, false);
+            end);
+        end
+        -- Forever: the game's AddOns settings entry opens the options window
+        if Compat.RegisterSettingsLauncher then
+            Compat.RegisterSettingsLauncher(ShowOptionsFrame);
+        end
         -- Initialize money tracker for accurate delta calculation
         previousMoney = GetMoney();
     end
