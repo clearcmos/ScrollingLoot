@@ -4,18 +4,17 @@
 
 Built for **TBC Classic Anniversary** and **WoW Forever**.
 
-On Anniversary it was last tested in game during the early phase (Karazhan and
-Magtheridon's Lair). The changes since then (the Fast Loot fixes, hover to pause,
-and repeated pickups adding up) have local tests but have not been tried on
-Anniversary in game; I have not had time to test there since.
+On Anniversary, the newer changes (Fast Loot fixes, hover to pause, repeats
+adding up, static lines sliding into place) have local tests but haven't been
+tried in game yet.
 
 ### WoW Forever
 
-The same download loads on WoW Forever. It has been tested solo in the open
-world only. Groups, dungeons, raids, battlegrounds and boss fights are untested. In those places
-Forever can hide loot chat text from addons; ScrollingLoot then reads pickups
-from the loot window instead, but that has not been checked inside an instance
-yet, so the feed may miss loot there. Differences from Anniversary:
+**Not yet tested in dungeons, raids, battlegrounds or groups.** The same download
+loads on Forever and works solo in the open world. Inside instances, Forever can
+hide loot chat from addons; ScrollingLoot then reads pickups from the loot window
+instead, but that hasn't been checked in an instance yet, so the feed may miss
+loot there. Differences from Anniversary:
 
 - Defaults to a compact, static feed with smaller icons and text and a dark
   background. Every setting can still be changed.
