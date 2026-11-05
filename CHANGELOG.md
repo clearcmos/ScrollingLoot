@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.1
+
+**Bug Fixes:**
+
+- **WoW Forever Loot Delay** - Loot notifications appeared about 1.5 seconds after the loot line in chat. Forever writes item links in a different color format, which the chat reader did not recognize, so every pickup waited for the loot window fallback. Notifications now appear with the chat line, and items received outside a loot window, such as quest rewards and crafted items, show again on Forever.
+
 ## v1.2.0
 
 **Testing note:** Repeats adding up and the line queue were tried in game on WoW Forever, not on Anniversary.

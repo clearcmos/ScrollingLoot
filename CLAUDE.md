@@ -85,6 +85,10 @@ Restored on 2026-11-04 (user request: restore what Forever does not already do):
   messages cancel each other in either order within 4s (`ConsumeChatLoot`,
   `ConsumeChatMoney`). The adapter registers its loot events at load so it runs
   before Fast Loot's `LOOT_READY` handler.
+- Forever item links color by quality name (`|cnIQ1:|Hitem:...`), not hex
+  (`|cffffffff|Hitem:...`), so `ParseLootMessage` matches `|c[^|]+`. Before
+  v1.2.1 it matched only hex: on Forever every chat pickup was dropped and shown
+  1.5s late by the loot window source. The tests' item links use the Forever form.
 - Battleground honor still has only the chat source.
 
 Run `luac5.1 -p ScrollingLoot.lua Compat_Forever.lua` and `lua5.1 tests/forever.lua`.

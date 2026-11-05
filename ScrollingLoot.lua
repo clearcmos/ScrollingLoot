@@ -351,7 +351,8 @@ local function ParseLootMessage(message)
 
     -- Pattern: "You receive loot: |cff......|Hitem:...|h[Item Name]|h|r"
     -- Or with quantity: "You receive loot: |cff......|Hitem:...|h[Item Name]|h|rx2"
-    local itemLink = strmatch(message, "(|c%x+|Hitem:[^|]+|h%[[^%]]+%]|h|r)");
+    -- Forever colors the link by quality name instead of hex: "|cnIQ2:|Hitem:..."
+    local itemLink = strmatch(message, "(|c[^|]+|Hitem:[^|]+|h%[[^%]]+%]|h|r)");
     if not itemLink then return nil; end
 
     -- Check for quantity

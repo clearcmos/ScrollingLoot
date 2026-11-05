@@ -64,7 +64,8 @@ C_Item = {
     end,
     GetItemCount = function(id) return bagCounts[id] or 0 end,
 }
-local function itemLink(id) return "|cffffffff|Hitem:" .. id .. ":0:0:0|h[" .. itemNames[id] .. "]|h|r" end
+-- Forever writes the quality as a named color (|cnIQ1:), Anniversary as hex (|cffffffff)
+local function itemLink(id) return "|cnIQ1:|Hitem:" .. id .. "::::::::::::::::::|h[" .. itemNames[id] .. "]|h|r" end
 
 -- Frames
 local objects, messages, hooks = {}, {}, {}
