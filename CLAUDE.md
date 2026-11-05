@@ -10,7 +10,7 @@
 - `ScrollingLoot_Camelot.toc` - Forever manifest (interface 16001, `AllowLoadGameType: camelot`); loads `Compat_Forever.lua` before the shared source
 - `Compat_Forever.lua` - Forever adapter: settings launcher, defaults, self-loot matching, restricted-message guards, asynchronous C_Item lookup and the loot window source
 - `tests/forever.lua` - Standalone Lua adapter/event tests with frame stand-ins; excluded from packages
-- `README.md` - Documentation (also used for CurseForge description)
+- `README.md` - Documentation and the source for the CurseForge description. A release upload does not change the project page; update its description (and summary, if needed) separately once the release is live
 - Deployed to: `/mnt/data/games/World of Warcraft/_anniversary_/Interface/AddOns/ScrollingLoot/` and `/mnt/data/games/World of Warcraft/_forever_/Interface/AddOns/ScrollingLoot/`, the same files in both
 
 ### Features
