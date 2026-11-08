@@ -10,8 +10,9 @@ tried in game yet.
 
 ### WoW Forever
 
-**Not yet tested in raids, battlegrounds or groups.** The same download loads on
-Forever and works in the open world and in dungeons. Differences from Anniversary:
+**Not yet tested in group dungeons, raids or battlegrounds.** The same download
+loads on Forever and works in the open world, solo or in a group, and in solo
+dungeons. Differences from Anniversary:
 
 - Defaults to a compact, static feed with smaller icons and text and a dark
   background. Every setting can still be changed.
