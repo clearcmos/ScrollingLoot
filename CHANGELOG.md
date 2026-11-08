@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**New Features:**
+
+- **Bag Count** - Item lines show how many of the item are now in your bags, e.g. "Linen Cloth x3 (45 in bags)" ("(45 Stk.)" on German clients). The count refreshes when the bags update, since the loot message can arrive before the item lands. A "Show Bag Count" option (on by default) turns it off. Tried in game on WoW Forever, not on Anniversary.
+
 ## v1.2.2
 
 **Changes:**

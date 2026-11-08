@@ -482,6 +482,7 @@ end
 
 test("a repeated pickup adds to its line on screen and keeps the line up", function()
     cached = true
+    bagCounts = {}                  -- no bag count suffix
     advance(100)                    -- an empty feed
     chatLoot(2589)
     advance(3)                      -- Forever lines last 4 s
@@ -492,6 +493,26 @@ test("a repeated pickup adds to its line on screen and keeps the line up", funct
     assert(lines[1].shown, "the second pickup restarted the line's time")
     chatLoot(4306)
     assert(#linesWith("Silk Cloth") == 1 and #linesWith("Linen Cloth") == 1, "another item gets its own line")
+    advance(100)
+end)
+
+test("an item line shows how many are in the bags and follows bag updates", function()
+    cached = true
+    advance(100)
+    bagCounts[2589] = 40
+    chatLoot(2589, 5)
+    local lines = linesWith("Linen Cloth")
+    assert(#lines == 1 and lines[1].text.textValue == "Linen Cloth x5 (40 in bags)", lines[1] and lines[1].text.textValue)
+    bagCounts[2589] = 45            -- the item reached the bags after the chat message
+    fire("BAG_UPDATE_DELAYED")
+    assert(lines[1].text.textValue == "Linen Cloth x5 (45 in bags)", lines[1].text.textValue)
+    advance(100)
+    ScrollingLootDB.showBagCount = false
+    chatLoot(2589, 2)
+    lines = linesWith("Linen Cloth")
+    assert(#lines == 1 and lines[1].text.textValue == "Linen Cloth x2", "no suffix when turned off")
+    ScrollingLootDB.showBagCount = true
+    bagCounts = {}
     advance(100)
 end)
 
