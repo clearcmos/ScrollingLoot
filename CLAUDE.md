@@ -51,8 +51,12 @@ suffix and interface 16xxx to CurseForge's Forever game versions. That TOC loads
 `Compat_Forever.lua` before the shared source. Without the adapter, the shared
 source follows the Anniversary path. v1.1.0 labeled Forever support
 "Experimental" in the TOC title, the Options > AddOns entry, the README and the
-changelog; v1.2.0 dropped the label (user decision 2026-11-05). Group, dungeon
-and battleground behavior is still untested, and the README says so.
+changelog; v1.2.0 dropped the label (user decision 2026-11-05). Dungeons work
+(user report 2026-11-08). Raid, battleground and group behavior is still
+untested, and the README says so without the technical reasons (user decision
+2026-11-08). Untested gaps: group roll wins and master loot never pass through
+the player's loot window, so where Forever hides loot chat they have no source;
+battleground honor is chat only.
 
 Forever defaults: static feed, five messages, 22px icons, 14px text, four-second
 duration and a dark background. Native loot toasts are unchanged.

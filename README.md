@@ -10,11 +10,8 @@ tried in game yet.
 
 ### WoW Forever
 
-**Not yet tested in dungeons, raids, battlegrounds or groups.** The same download
-loads on Forever and works solo in the open world. Inside instances, Forever can
-hide loot chat from addons; ScrollingLoot then reads pickups from the loot window
-instead, but that hasn't been checked in an instance yet, so the feed may miss
-loot there. Differences from Anniversary:
+**Not yet tested in raids, battlegrounds or groups.** The same download loads on
+Forever and works in the open world and in dungeons. Differences from Anniversary:
 
 - Defaults to a compact, static feed with smaller icons and text and a dark
   background. Every setting can still be changed.
