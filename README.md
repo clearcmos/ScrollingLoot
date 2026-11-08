@@ -35,6 +35,7 @@ dungeons. Differences from Anniversary:
 - **Item icons** - Each notification includes the item's icon for quick recognition
 - **Quality colors** - Text is colored by item rarity (grey → white → green → blue → purple → orange)
 - **Stack counts** - Shows quantity for multi-item loots (e.g., "Wool Cloth x5")
+- **Bag count** - Shows how many of the item are now in your bags (e.g., "Wool Cloth x5 (45 in bags)"; German clients show "(45 Stk.)")
 - **Repeats add up** - Looting the same item again while its line is on screen adds to that line instead of opening a new one; gold and honor add up the same way
 - **No lost lines** - When the feed is full, new pickups wait and appear as older lines expire, instead of pushing the oldest line out
 - **Money notifications** - Gold, silver, and copper pickups display with appropriate coin icons
@@ -94,6 +95,7 @@ Type `/sloot` to open the options panel. Blue highlighted areas appear over the 
 - Fade start time
 - Scroll distance (disabled in Static Mode)
 - Hover to pause + tooltip (on by default)
+- Show bag count (on by default)
 
 **Position**
 - Drag the preview area to set the position

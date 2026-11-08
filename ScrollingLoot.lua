@@ -17,6 +17,7 @@ local DEFAULT_SETTINGS = {
     staticMode = false,         -- Static mode: no scrolling, just fade in place
     maxMessages = 10,           -- Maximum simultaneous messages
     showQuantity = true,        -- Show stack counts
+    showBagCount = true,        -- Show how many of the item are now in the bags
     minQuality = 0,             -- Minimum quality to show (0 = all)
     showBackground = false,     -- Show background behind loot text
     backgroundOpacity = 0.7,    -- Background opacity (0.0 to 1.0)
@@ -470,6 +471,19 @@ local overflowQueue = {};
 -- Fade-in duration for static mode (seconds)
 local STATIC_FADE_IN_DURATION = 0.3;
 
+-- Bag count suffix: German clients read "(45 Stk.)", every other client "(45 in bags)"
+local BAG_COUNT_FORMAT = (GetLocale and GetLocale() == "deDE") and "%s (%d Stk.)" or "%s (%d in bags)";
+
+-- How many of a looted item are in the bags right now, or nil if unknown
+local function GetBagCount(msg)
+    if msg.isPreview then return msg.bagCount; end
+    local itemID = msg.itemLink and tonumber(strmatch(msg.itemLink, "item:(%d+)"));
+    if not itemID then return nil; end
+    local count = C_Item and C_Item.GetItemCount and C_Item.GetItemCount(itemID) or GetItemCount(itemID);
+    if Compat.Accessible and not Compat.Accessible(count) then return nil; end
+    return count;
+end
+
 -- Draw a line's icon, text, size and background from its message
 local function ApplyMessage(frame, msg)
     local icon, text = msg.icon, msg.name;
@@ -485,6 +499,10 @@ local function ApplyMessage(frame, msg)
         r, g, b = GetQualityColor(msg.quality);
         if db.showQuantity and msg.amount > 1 then
             text = format("%s x%d", msg.name, msg.amount);
+        end
+        local bagCount = db.showBagCount and GetBagCount(msg);
+        if bagCount and bagCount > 0 then
+            text = format(BAG_COUNT_FORMAT, text, bagCount);
         end
         if db.glowEnabled and msg.quality >= db.glowMinQuality then
             textGap = 12; -- Extra space for glow
@@ -640,7 +658,8 @@ local function AddLootMessageInternal(itemName, itemIcon, itemQuality, quantity,
         key = "item:" .. ((itemLink and strmatch(itemLink, "|H(item:[^|]+)|h")) or itemName);
     end
     ShowMessage({ kind = "item", key = key, amount = quantity or 1, name = itemName, icon = itemIcon,
-        quality = itemQuality, itemLink = itemLink, isPreview = isPreview });
+        quality = itemQuality, itemLink = itemLink, isPreview = isPreview,
+        bagCount = isPreview and math.random(1, 200) or nil });
 end
 
 -- Add a loot message to display (public API)
@@ -2313,6 +2332,24 @@ local function CreateOptionsFrame()
     hoverCheckbox.checkbox:SetScript("OnLeave", function()
         GameTooltip:Hide();
     end);
+    yOffset = yOffset - 30;
+
+    -- Bag count checkbox
+    local bagCountCheckbox = CreateCheckbox(rightCol, "Show Bag Count", 200);
+    bagCountCheckbox:SetPoint("TOPLEFT", 0, yOffset);
+    bagCountCheckbox:SetValue(db.showBagCount);
+    bagCountCheckbox.OnValueChanged = function(self, value)
+        db.showBagCount = value and true or false;
+    end;
+    bagCountCheckbox.checkbox.tooltipText = "Show how many of the looted item are now in your bags, e.g. \"Linen Cloth x3 (45 in bags)\".";
+    bagCountCheckbox.checkbox:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText(self.tooltipText, nil, nil, nil, nil, true);
+        GameTooltip:Show();
+    end);
+    bagCountCheckbox.checkbox:SetScript("OnLeave", function()
+        GameTooltip:Hide();
+    end);
 
     -- Bottom buttons
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
@@ -2342,6 +2379,7 @@ local function CreateOptionsFrame()
         -- Update all widgets
         enabledCheckbox:SetValue(db.enabled);
         quantityCheckbox:SetValue(db.showQuantity);
+        bagCountCheckbox:SetValue(db.showBagCount);
         bgCheckbox:SetValue(db.showBackground);
         moneyCheckbox:SetValue(db.showMoney);
         honorCheckbox:SetValue(db.showHonor);
@@ -2494,6 +2532,17 @@ local function OnEvent(self, event, ...)
             end
         end
 
+    elseif event == "BAG_UPDATE_DELAYED" then
+        -- The loot message can arrive before the item is in the bags, so
+        -- refresh the bag count of item lines still on screen
+        if db and db.showBagCount then
+            for _, frame in ipairs(activeMessages) do
+                if frame.msg and frame.msg.kind == "item" and not frame.msg.isPreview then
+                    ApplyMessage(frame, frame.msg);
+                end
+            end
+        end
+
     elseif event == "PLAYER_MONEY" then
         -- Track money changes (kept for potential future use)
         previousMoney = GetMoney();
@@ -2641,6 +2690,7 @@ ScrollingLoot:SetScript("OnEvent", OnEvent);
 ScrollingLoot:RegisterEvent("CHAT_MSG_LOOT");
 ScrollingLoot:RegisterEvent("CHAT_MSG_MONEY");
 ScrollingLoot:RegisterEvent("PLAYER_MONEY");
+ScrollingLoot:RegisterEvent("BAG_UPDATE_DELAYED");
 ScrollingLoot:RegisterEvent("CHAT_MSG_COMBAT_HONOR_GAIN");
 ScrollingLoot:RegisterEvent("ADDON_LOADED");
 ScrollingLoot:RegisterEvent("PLAYER_LOGIN");

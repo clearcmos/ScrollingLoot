@@ -96,7 +96,7 @@ Restored on 2026-11-04 (user request: restore what Forever does not already do):
 - Battleground honor still has only the chat source.
 
 Run `luac5.1 -p ScrollingLoot.lua Compat_Forever.lua` and `lua5.1 tests/forever.lua`.
-The 24 tests cover merging repeated pickups, static lines sliding into the gap an expired line leaves, the overflow queue, `testhonor` lines not merging, hover pause (tooltip, held pickups, resume), async item lookup, message ownership, restricted input, Fast
+The 25 tests cover merging repeated pickups, the bag count suffix and its refresh on `BAG_UPDATE_DELAYED`, static lines sliding into the gap an expired line leaves, the overflow queue, `testhonor` lines not merging, hover pause (tooltip, held pickups, resume), async item lookup, message ownership, restricted input, Fast
 Loot event order, a corpse opened within the throttle of the previous one, the
 full-bags window rule (kept only when the loot has an item), the
 loot window source and its duplicate suppression (both
